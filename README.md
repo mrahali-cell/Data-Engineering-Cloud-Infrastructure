@@ -141,4 +141,6 @@ days_of_cover = qty_on_hand / AVG(daily_consumption over the last 28 days)
 
 ## Team
 
-*Names here.*
+Atoui Soumaya 
+Rahali Manel
+Javaid Hadiqa 
