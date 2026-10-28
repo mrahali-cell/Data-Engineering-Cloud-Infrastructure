@@ -1,0 +1,13 @@
+hospital_id,hospital_name,city,beds
+H01,Hôpital Saint-Lazare,Paris,900
+H02,Hôpital des Lilas,Montreuil,450
+H03,Centre Hospitalier de la Seine,Asnières-sur-Seine,600
+H04,Hôpital Bellevue,Saint-Denis,700
+H05,Hôpital du Parc,Créteil,550
+H06,Hôpital des Tilleuls,Nanterre,500
+H07,Centre Hospitalier du Val,Argenteuil,400
+H08,Hôpital Marie-Curie,Boulogne-Billancourt,650
+H09,Hôpital de l'Ourcq,Bobigny,380
+H10,Hôpital Les Peupliers,Versailles,520
+H11,Hôpital Rive Gauche,Issy-les-Moulineaux,450
+H12,Centre Hospitalier de l'Est,Noisy-le-Grand,400

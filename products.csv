@@ -1,0 +1,26 @@
+product_id,product_name,category,unit_cost_eur,is_cold_chain,is_narcotic
+P001,Paracetamol 1g tablet,Analgesic,0.05,False,False
+P002,Paracetamol 1g IV,Analgesic,1.2,False,False
+P003,Ibuprofen 400mg tablet,Analgesic,0.08,False,False
+P004,Morphine 10mg injection,Analgesic,2.5,False,True
+P005,Amoxicillin 1g tablet,Antibiotic,0.3,False,False
+P006,Ceftriaxone 1g injection,Antibiotic,3.8,False,False
+P007,Vancomycin 500mg injection,Antibiotic,9.5,False,False
+P008,Insulin glargine pen,Diabetes,24.0,True,False
+P009,Insulin aspart pen,Diabetes,18.0,True,False
+P010,Metformin 1000mg tablet,Diabetes,0.1,False,False
+P011,Enoxaparin 4000 IU syringe,Anticoagulant,3.2,False,False
+P012,Heparin 5000 IU injection,Anticoagulant,2.1,False,False
+P013,Omeprazole 20mg capsule,Gastro,0.07,False,False
+P014,Ondansetron 8mg injection,Gastro,1.9,False,False
+P015,Furosemide 40mg tablet,Cardio,0.06,False,False
+P016,Amiodarone 150mg injection,Cardio,4.5,False,False
+P017,Adrenaline 1mg injection,Emergency,3.0,False,False
+P018,Salbutamol inhaler,Respiratory,3.5,False,False
+P019,Epoetin alfa 4000 IU syringe,Oncology,85.0,True,False
+P020,Rituximab 500mg vial,Oncology,1150.0,True,False
+P021,Hepatitis B vaccine,Vaccine,12.0,True,False
+P022,Influenza vaccine,Vaccine,8.5,True,False
+P023,Albumin 20% 100ml,Blood product,45.0,False,False
+P024,Sodium chloride 0.9% 500ml,Fluids,1.1,False,False
+P025,Glucose 5% 500ml,Fluids,1.2,False,False
