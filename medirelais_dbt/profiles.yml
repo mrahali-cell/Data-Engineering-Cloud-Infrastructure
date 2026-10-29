@@ -1,0 +1,12 @@
+medirelais_dbt:
+  target: dev
+  outputs:
+    dev:
+      type: snowflake
+      account: ''
+      user: ''
+      role: ACCOUNTADMIN
+      warehouse: MEDIRELAIS_WH
+      database: MEDIRELAIS
+      schema: BRONZE
+      threads: 4

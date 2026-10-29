@@ -1,0 +1,38 @@
+version: 2
+
+models:
+  - name: silver_stock
+    description: "One row per batch on the shelf, with product and hospital info"
+    columns:
+      - name: batch_id
+        tests: [unique, not_null]
+      - name: hospital_id
+        tests: [not_null]
+      - name: expiry_date
+        tests: [not_null]
+
+  - name: silver_consumption
+    description: "Daily consumption per hospital and product"
+    columns:
+      - name: qty_used
+        tests: [not_null]
+
+  - name: gold_value_at_risk
+    description: "Use case 1 - stock value expiring within 90 days (no narcotics, recalled or expired)"
+    columns:
+      - name: batch_id
+        tests: [unique, not_null]
+      - name: value_at_risk_eur
+        tests: [not_null]
+
+  - name: gold_days_of_cover
+    description: "Use case 2 - days of stock left at the normal consumption pace"
+    columns:
+      - name: days_of_cover
+        tests: [not_null]
+
+  - name: gold_transfer_suggestions
+    description: "Use case 1 - where to send each transferable batch"
+    columns:
+      - name: batch_id
+        tests: [unique, not_null]

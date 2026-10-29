@@ -1,0 +1,11 @@
+version: 2
+
+sources:
+  - name: bronze
+    database: MEDIRELAIS
+    schema: BRONZE
+    tables:
+      - name: hospitals
+      - name: products
+      - name: stock
+      - name: consumption
