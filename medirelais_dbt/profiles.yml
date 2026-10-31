@@ -5,7 +5,7 @@ medirelais_dbt:
       type: snowflake
       account: ''
       user: ''
-      role: ACCOUNTADMIN
+      role: MEDIRELAIS_PIPELINE
       warehouse: MEDIRELAIS_WH
       database: MEDIRELAIS
       schema: BRONZE

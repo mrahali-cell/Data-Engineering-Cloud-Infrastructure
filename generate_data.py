@@ -6,6 +6,10 @@ Creates 4 CSV files in a folder called "data":
   - stock.csv         : SOURCE 1 - what is on each pharmacy shelf today (one row per batch)
   - consumption.csv   : SOURCE 2 - how much each hospital used per day (last 90 days)
 
+This is a SAMPLE: 25 products out of the ~2,500 a hospital pharmacy lists, and
+about EUR 1M of stock on the shelves, against EUR 96M of purchases a year for
+the network. The planted cases below are the acceptance-test answer key.
+
 Only uses Python's built-in libraries: no pip install needed.
 Run it with:  python generate_data.py
 """
@@ -87,6 +91,15 @@ def daily_use(product, beds):
     return product[6] * beds / 100
 
 
+def to_units(x):
+    """Round to whole units without losing slow-moving products.
+    Plain rounding turns 0.3 vials a day into 0 every day; here 0.3 becomes
+    1 on about 30% of days, so the long-run average stays right."""
+    x = max(x, 0)
+    whole = int(x)
+    return whole + (1 if random.random() < x - whole else 0)
+
+
 # ---------------------------------------------------------------
 # 3. Consumption (SOURCE 2): one row per hospital x product x day
 # ---------------------------------------------------------------
@@ -101,16 +114,20 @@ profile[("H01", "P008")] = 0.1
 profile[("H04", "P008")] = 2.0
 # Planted case: H07 has stopped using Epoetin (zero consumption -> excluded from cover)
 profile[("H07", "P019")] = 0.0
+# Planted case: H12 only started using albumin 35 days ago
+# (less than 8 weeks of history -> excluded from days of cover)
+NEW_PRODUCT_DAYS = {("H12", "P023"): 35}
 
 consumption_rows = []
 for h_id, _, _, beds in HOSPITALS:
     for p in PRODUCTS:
         avg = daily_use(p, beds) * profile[(h_id, p[0])]
-        for d in range(HISTORY_DAYS, 0, -1):
+        history = NEW_PRODUCT_DAYS.get((h_id, p[0]), HISTORY_DAYS)
+        for d in range(history, 0, -1):
             day = SNAPSHOT_DATE - timedelta(days=d)
             weekend_factor = 0.8 if day.weekday() >= 5 else 1.0
-            qty = round(random.gauss(avg * weekend_factor, avg * 0.25))
-            consumption_rows.append([day.isoformat(), h_id, p[0], max(qty, 0)])
+            qty = to_units(random.gauss(avg * weekend_factor, avg * 0.25))
+            consumption_rows.append([day.isoformat(), h_id, p[0], qty])
 
 # ---------------------------------------------------------------
 # 4. Stock (SOURCE 1): one row per batch on the shelf today
@@ -138,11 +155,15 @@ for h_id, _, _, beds in HOSPITALS:
             expiry = SNAPSHOT_DATE + timedelta(days=random.randint(120, 720))
             add_batch(h_id, p[0], qty, expiry)
 
-# Some normal batches that are getting close to expiry (realistic noise)
+# Some normal batches that are getting close to expiry (realistic noise).
+# Sized from the hospital's own use (15 to 60 days of it), so an expensive,
+# slow-moving product does not show up as 200 vials.
 for _ in range(15):
-    h_id = random.choice(HOSPITALS)[0]
+    h_id, _, _, beds = random.choice(HOSPITALS)
     p = random.choice(PRODUCTS)
-    add_batch(h_id, p[0], random.randint(10, 200), SNAPSHOT_DATE + timedelta(days=random.randint(35, 90)))
+    avg = daily_use(p, beds) * profile[(h_id, p[0])]
+    qty = max(to_units(avg * random.uniform(15, 60)), 1)
+    add_batch(h_id, p[0], qty, SNAPSHOT_DATE + timedelta(days=random.randint(35, 90)))
 
 # ---- Planted cases (so the dashboard has a story to tell) ----
 # UC1: H01 holds 220 insulin glargine pens expiring in 60 days (~€5,280 at risk),
