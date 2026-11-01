@@ -140,7 +140,34 @@ days_of_cover = qty_on_hand / AVG(daily_consumption over the last 28 days)
 
 ## 3. Architecture
 
-*Coming next: data sources → ingestion → bronze / silver / gold → dashboards.*
+*Diagram coming next: 6 sources → ingestion (Docker) → bronze / silver / gold (dbt in Snowflake) → dashboard (Streamlit).*
+
+### Sources and ingestion
+
+Six sources, each with the ingestion method that fits it. All code is in [`ingestion/`](ingestion/) (one Docker image, one job per source).
+
+| # | Source | Real? | Ingestion method | Bronze table(s) |
+| --- | --- | --- | --- | --- |
+| S1 | Pharmacy stock system (Postgres) | simulated, messy | incremental pull on `updated_at` + `MERGE` | `HOSPITALS_RAW`, `PRODUCTS_RAW`, `STOCK_RAW` |
+| S2 | Daily consumption files | simulated, messy | batch files → stage → `COPY INTO`, columns matched by name | `CONSUMPTION_RAW` |
+| S3 | BDPM public drug database | **real** | weekly download, full refresh | `BDPM_SPECIALITES_RAW`, `BDPM_PRESENTATIONS_RAW` |
+| S4 | BDPM shortages file | **real** | daily pull, change detection (row hash + `MERGE`) | `SHORTAGES_RAW` |
+| S5 | Fridge temperature sensors | simulated, messy | JSON micro-batches → `VARIANT` | `FRIDGE_READINGS_RAW` |
+| S6 | Open-Meteo weather API | **real** | REST API pull → `VARIANT` | `WEATHER_RAW` |
+
+Every bronze row carries `_source` (or `_source_file`), `_loaded_at` and `_batch_id`; every job run is logged in `MEDIRELAIS.BRONZE.LOAD_RUNS`.
+
+### Repository structure
+
+```
+README.md            company, use cases, architecture, how to run, team
+ingestion/           6 sources -> bronze: source simulator, one job per source, Dockerfile, docker-compose
+medirelais_dbt/      dbt project: silver (cleaning, quarantine) and gold (metrics), tests
+snowflake/           setup and scheduling scripts
+streamlit/           dashboard
+data/, generate_data.py, snowflake/02_load_bronze.sql
+                     first CSV version; to retire once silver reads the new bronze tables
+```
 
 ### About the data
 
@@ -157,6 +184,18 @@ The business figures in section 1 are about the real network. The numbers on the
 Bronze keeps every value as text, exactly as received, with `_source`, `_loaded_at` and `_batch_id`. Silver types the values. A row that fails a check is not dropped silently: it goes to `silver_stock_quarantine` or `silver_consumption_quarantine` with a `reject_reason`. Gold reads from silver only.
 
 ## 4. How to run
+
+**Ingestion (6 sources → bronze)**, with Docker Desktop running. Details in [`ingestion/README.md`](ingestion/README.md).
+
+```bash
+cd ingestion
+cp .env.example .env                        # SNOWFLAKE_USER = your LOGIN_NAME
+docker compose run --rm keygen              # prints the ALTER USER line to run once in Snowflake
+docker compose up -d pharmacy-db
+docker compose run --rm ingest python run_all.py --day 1    # then --day 2, 3...
+```
+
+**First CSV version** (kept until silver is moved to the new bronze tables):
 
 1. `python generate_data.py` writes the CSV files to `data/`.
 2. An admin runs `snowflake/01_setup.sql` once. It creates the warehouse, the database, the bronze tables, the `MEDIRELAIS_PIPELINE` role and the link to this GitHub repo.
