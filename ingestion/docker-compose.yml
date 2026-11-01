@@ -35,5 +35,16 @@ services:
       pharmacy-db:
         condition: service_healthy
 
+  # One-off helper: creates the Snowflake key pair in ./keys (the only service allowed to write there)
+  keygen:
+    image: medirelais-ingest:1.0.0
+    env_file: .env
+    environment:
+      SNOWFLAKE_PRIVATE_KEY_PATH: /app/keys/rsa_key.p8
+    volumes:
+      - ./keys:/app/keys
+    command: ["python", "make_key.py"]
+    profiles: ["setup"]
+
 volumes:
   pharmacy_data:
