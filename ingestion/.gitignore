@@ -4,3 +4,5 @@ landing/
 __pycache__/
 *.p8
 *.pub
+.env.*
+!.env.example
