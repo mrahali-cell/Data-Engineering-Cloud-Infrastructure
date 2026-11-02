@@ -7,6 +7,7 @@ provider "snowflake" {
   authenticator     = "SNOWFLAKE_JWT"
   private_key       = file(var.snowflake_private_key_path)
   role              = "SYSADMIN"
+  warehouse         = "MEDIRELAIS_WH" # needed to build the governance mapping table
 }
 
 # AWS: credentials come from the environment (AWS_PROFILE), never from the code.

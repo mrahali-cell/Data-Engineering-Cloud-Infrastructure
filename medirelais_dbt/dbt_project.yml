@@ -15,3 +15,15 @@ models:
     gold:
       +schema: GOLD
       +materialized: table
+      # Access rules (defined in terraform/governance.tf). Each run recreates the gold tables,
+      # which drops their policies, so they are attached again right after each build.
+      gold_value_at_risk:
+        +post-hook:
+          - "ALTER TABLE {{ this }} ADD ROW ACCESS POLICY MEDIRELAIS.GOVERNANCE.HOSPITAL_ROWS ON (hospital_id)"
+          - "ALTER TABLE {{ this }} MODIFY COLUMN unit_cost_eur SET MASKING POLICY MEDIRELAIS.GOVERNANCE.PURCHASE_PRICE"
+      gold_days_of_cover:
+        +post-hook:
+          - "ALTER TABLE {{ this }} ADD ROW ACCESS POLICY MEDIRELAIS.GOVERNANCE.HOSPITAL_ROWS ON (hospital_id)"
+      gold_transfer_suggestions:
+        +post-hook:
+          - "ALTER TABLE {{ this }} ADD ROW ACCESS POLICY MEDIRELAIS.GOVERNANCE.TRANSFER_ROWS ON (from_hospital_id, to_hospital_id)"
