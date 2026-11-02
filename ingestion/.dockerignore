@@ -1,0 +1,6 @@
+.env
+keys/
+landing/
+__pycache__/
+.git
+*.md

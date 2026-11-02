@@ -1,0 +1,50 @@
+# MédiRelais · local sources + ingestion
+#   docker compose up -d pharmacy-db                       start the hospitals' stock database (S1)
+#   docker compose run --rm ingest python run_all.py --day 1   simulate day 1 and ingest the 4 sources
+# The password below is for a local throw-away database only.
+services:
+  pharmacy-db:
+    image: postgres:16.4
+    environment:
+      POSTGRES_USER: source
+      POSTGRES_PASSWORD: source_pw
+      POSTGRES_DB: pharmacy_source
+    ports: ["5433:5432"]            # 5433 on the laptop, so it does not clash with another Postgres
+    volumes: ["pharmacy_data:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U source -d pharmacy_source"]
+      interval: 5s
+      retries: 10
+
+  ingest:
+    build: .
+    image: medirelais-ingest:1.0.0
+    env_file: .env                   # Snowflake account, user, role... (never committed)
+    environment:
+      PGHOST: pharmacy-db
+      PGPORT: "5432"
+      PGDATABASE: pharmacy_source
+      PGUSER: source
+      PGPASSWORD: source_pw
+      LANDING_DIR: /app/landing
+      SNOWFLAKE_PRIVATE_KEY_PATH: /app/keys/rsa_key.p8
+    volumes:
+      - ./keys:/app/keys:ro          # the private key is mounted at run time, read-only
+      - ./landing:/app/landing       # generated files stay visible on the laptop
+    depends_on:
+      pharmacy-db:
+        condition: service_healthy
+
+  # One-off helper: creates the Snowflake key pair in ./keys (the only service allowed to write there)
+  keygen:
+    image: medirelais-ingest:1.0.0
+    env_file: .env
+    environment:
+      SNOWFLAKE_PRIVATE_KEY_PATH: /app/keys/rsa_key.p8
+    volumes:
+      - ./keys:/app/keys
+    command: ["python", "make_key.py"]
+    profiles: ["setup"]
+
+volumes:
+  pharmacy_data:

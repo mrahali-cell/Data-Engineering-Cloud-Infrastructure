@@ -1,0 +1,35 @@
+# Secrets: never commit these
+.env
+.env.*
+!.env.example
+keys/
+*.p8
+*.pem
+*.key
+credentials*.json
+service-account*.json
+
+# Terraform state and local variables (the state lives in the remote GCS backend)
+*.tfstate
+*.tfstate.*
+.terraform/
+*.tfvars
+crash.log
+
+# dbt build output
+target/
+dbt_packages/
+logs/
+.user.yml
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# OS and editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

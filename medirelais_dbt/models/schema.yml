@@ -1,38 +1,127 @@
 version: 2
 
 models:
+  - name: silver_hospitals
+    description: "One row per hospital, typed from bronze"
+    columns:
+      - name: hospital_id
+        tests: [unique, not_null]
+      - name: beds
+        tests: [not_null]
+
+  - name: silver_products
+    description: "One row per product, typed from bronze"
+    columns:
+      - name: product_id
+        tests: [unique, not_null]
+      - name: unit_cost_eur
+        tests: [not_null]
+      - name: is_cold_chain
+        tests: [not_null]
+      - name: is_narcotic
+        tests: [not_null]
+
   - name: silver_stock
-    description: "One row per batch on the shelf, with product and hospital info"
+    description: "One row per batch on the shelf per snapshot day, with product and hospital info"
+    tests:
+      - unique:
+          column_name: "snapshot_date || '|' || batch_id"
     columns:
       - name: batch_id
-        tests: [unique, not_null]
+        tests: [not_null]
       - name: hospital_id
         tests: [not_null]
       - name: expiry_date
         tests: [not_null]
 
+  - name: silver_stock_quarantine
+    description: "Stock rows that failed a check, kept as received, with the reason"
+    columns:
+      - name: reject_reason
+        tests:
+          - not_null
+          - accepted_values:
+              values: [bad_snapshot_date, missing_batch_id, unknown_hospital, unknown_product,
+                       bad_quantity, negative_quantity, zero_quantity, implausible_quantity,
+                       bad_expiry_date, placeholder_expiry_date, bad_recall_flag, duplicate_row]
+
   - name: silver_consumption
     description: "Daily consumption per hospital and product"
+    tests:
+      - unique:
+          column_name: "consumption_date || '|' || hospital_id || '|' || product_id"
     columns:
       - name: qty_used
         tests: [not_null]
 
+  - name: silver_consumption_quarantine
+    description: "Consumption rows that failed a check, kept as received, with the reason"
+    columns:
+      - name: reject_reason
+        tests:
+          - not_null
+          - accepted_values:
+              values: [bad_date, placeholder_date, unknown_hospital, unknown_product, bad_quantity,
+                       negative_quantity, implausible_quantity, duplicate_row]
+
+  - name: silver_product_reference
+    description: "Each product linked to the national drug database (S3, CIS codes) by molecule and by name, and to the national shortage list (S4)"
+    columns:
+      - name: product_id
+        tests: [unique, not_null]
+      - name: bdpm_medicines_found_only_by_molecule
+        description: "Medicines found through the composition file whose name does not contain the molecule (brand names such as Doliprane)"
+      - name: is_national_shortage
+        tests: [not_null]
+
+  - name: silver_daily_use
+    description: "Average daily use over the 28 days before each snapshot, per hospital and product"
+    tests:
+      - unique:
+          column_name: "snapshot_date || '|' || hospital_id || '|' || product_id"
+
   - name: gold_value_at_risk
     description: "Use case 1 - stock value expiring within 90 days (no narcotics, recalled or expired)"
+    tests:
+      - unique:
+          column_name: "snapshot_date || '|' || batch_id"
     columns:
       - name: batch_id
-        tests: [unique, not_null]
+        tests: [not_null]
       - name: value_at_risk_eur
         tests: [not_null]
+      - name: transfer_block_reason
+        tests:
+          - accepted_values:
+              values: [under_30_days, under_200_eur, no_cold_chain_proof]
 
   - name: gold_days_of_cover
     description: "Use case 2 - days of stock left at the normal consumption pace"
+    tests:
+      - unique:
+          column_name: "snapshot_date || '|' || hospital_id || '|' || product_id"
     columns:
       - name: days_of_cover
         tests: [not_null]
 
   - name: gold_transfer_suggestions
-    description: "Use case 1 - where to send each transferable batch"
+    description: "Use case 1 - where to send each transferable batch: the hospital that can use the most of it before it expires"
+    tests:
+      - unique:
+          column_name: "snapshot_date || '|' || batch_id"
+      - unique:
+          column_name: "snapshot_date || '|' || priority_rank"
     columns:
       - name: batch_id
-        tests: [unique, not_null]
+        tests: [not_null]
+      - name: to_hospital_id
+        tests: [not_null]
+      - name: usable_qty_before_expiry
+        description: "Units the receiver can use before the batch expires, after its own stock that expires first"
+        tests: [not_null]
+      - name: saveable_value_eur
+        description: "usable_qty_before_expiry x unit cost: the value the transfer saves from expiry"
+        tests: [not_null]
+      - name: priority_rank
+        description: "1 = handle first: medicines in national shortage first, then the largest saveable value"
+        tests: [not_null]
