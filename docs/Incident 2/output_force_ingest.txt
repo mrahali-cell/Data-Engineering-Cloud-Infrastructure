@@ -1,0 +1,75 @@
+(.venv) PS D:\Design + Courses\Data Engineering & Cloud Infrastructure\Data-Engineering-Cloud-Infrastructure\airflow> cd ../ingestion
+(.venv) PS D:\Design + Courses\Data Engineering & Cloud Infrastructure\Data-Engineering-Cloud-Infrastructure\ingestion> docker compose run --rm ingest python jobs/ingest_consumption_files.py --force
+[+] run 1/1
+ ✔ Container ingestion-pharmacy-db-1 Running                                                                           0.0s
+Image medirelais-ingest:1.0.0 Pulling 
+Image medirelais-ingest:1.0.0 pull access denied for medirelais-ingest, repository does not exist or may require 'docker login' 
+Image medirelais-ingest:1.0.0 Building 
+[+] Building 47.4s (16/16) FINISHED                                                                                        
+ => [internal] load local bake definitions                                                                            0.1s
+ => => reading from stdin 696B                                                                                        0.1s
+ => [internal] load build definition from Dockerfile                                                                  0.1s
+ => => transferring dockerfile: 919B                                                                                  0.0s
+ => [internal] load metadata for docker.io/library/python:3.12.7-slim                                                 2.4s
+ => [auth] library/python:pull token for registry-1.docker.io                                                         0.0s
+ => [internal] load .dockerignore                                                                                     0.1s
+ => => transferring context: 89B                                                                                      0.0s
+ => [1/8] FROM docker.io/library/python:3.12.7-slim@sha256:60d9996b6a8a3689d36db740b49f4327be3be09a21122bd02fb8895ab  4.9s
+ => => resolve docker.io/library/python:3.12.7-slim@sha256:60d9996b6a8a3689d36db740b49f4327be3be09a21122bd02fb8895ab  0.1s
+ => => sha256:bc0965b23a04fe7f2d9fb20f597008fcf89891de1c705ffc1c80483a1f098e4f 28.23MB / 28.23MB                      2.6s
+ => => sha256:5e739003c33414360cf2cec9452e1935b1bfcae79f279c33009bf4c0d5596f52 3.32MB / 3.32MB                        1.2s
+ => => sha256:46271edb89aec00565d974118707aaded82928c7ea7cb0a2bcc94b1f17e17e3d 249B / 249B                            0.7s
+ => => sha256:5f86e0092844f78afa84a3b63059ea82e82fa93a28eedde55386370d924e8cf3 13.63MB / 13.63MB                      1.8s
+ => => extracting sha256:bc0965b23a04fe7f2d9fb20f597008fcf89891de1c705ffc1c80483a1f098e4f                             1.3s
+ => => extracting sha256:5e739003c33414360cf2cec9452e1935b1bfcae79f279c33009bf4c0d5596f52                             0.2s
+ => => extracting sha256:5f86e0092844f78afa84a3b63059ea82e82fa93a28eedde55386370d924e8cf3                             0.6s
+ => => extracting sha256:46271edb89aec00565d974118707aaded82928c7ea7cb0a2bcc94b1f17e17e3d                             0.0s
+ => [internal] load build context                                                                                     0.1s
+ => => transferring context: 48.56kB                                                                                  0.1s
+ => [2/8] WORKDIR /app                                                                                                0.3s
+ => [3/8] COPY requirements.txt .                                                                                     0.1s
+ => [4/8] RUN pip install -r requirements.txt                                                                        26.2s
+ => [5/8] COPY common.py generate_sources.py run_all.py make_key.py ./                                                0.2s
+ => [6/8] COPY jobs/ jobs/                                                                                            0.1s
+ => [7/8] COPY sql/ sql/                                                                                              0.1s
+ => [8/8] RUN useradd --create-home --uid 1000 medirelais     && mkdir -p /app/landing /app/keys && chown medirelais  0.7s
+ => exporting to image                                                                                               11.2s
+ => => exporting layers                                                                                               5.6s
+ => => exporting manifest sha256:14386aeaa65008c5c0cc3904f1d1b1edcc0554f7924ebd77acf480f18547619f                     0.0s
+ => => exporting config sha256:b982982244a0800a79e4f61582870bdf208f4fd1a5af10c474d26d9ed9361f80                       0.0s
+ => => exporting attestation manifest sha256:a3b0a76d8eca6ad5f409b384b59643dd682daa1661bb2a8296a364d7a3531cd2         0.0s
+ => => exporting manifest list sha256:8e83a979f79688ca1d3cf5146ed8e7d283e46db9b1352a29ce43387d13bf6908                0.0s
+ => => naming to docker.io/library/medirelais-ingest:1.0.0                                                            0.0s
+ => => unpacking to docker.io/library/medirelais-ingest:1.0.0                                                         5.3s
+ => resolving provenance for metadata file                                                                            0.1s
+Image medirelais-ingest:1.0.0 Built 
+Container ingestion-pharmacy-db-1 Waiting 
+Container ingestion-pharmacy-db-1 Healthy 
+Container ingestion-ingest-run-c502c7ee70ae Creating 
+Container ingestion-ingest-run-c502c7ee70ae Created 
+  24 files (28422 lines) available in @MEDIRELAIS.BRONZE.RAW_STAGE/consumption/
+    raw_stage/consumption/dt=2026-10-28/H08.csv: LOADED, 2333 rows, 0 errors
+    raw_stage/consumption/dt=2026-10-28/H03.csv: LOADED, 2343 rows, 0 errors
+    raw_stage/consumption/dt=2026-10-28/H10.csv: LOADED, 2344 rows, 0 errors
+    raw_stage/consumption/dt=2026-10-28/H05.csv: LOADED, 2341 rows, 0 errors
+    raw_stage/consumption/dt=2026-10-28/H06.csv: LOADED, 2342 rows, 0 errors
+    raw_stage/consumption/dt=2026-10-29/H01.csv: LOADED, 27 rows, 0 errors
+    raw_stage/consumption/dt=2026-10-29/H05.csv: LOADED, 27 rows, 0 errors
+    raw_stage/consumption/dt=2026-10-28/H07.csv: LOADED, 2337 rows, 0 errors
+    raw_stage/consumption/dt=2026-10-28/H09.csv: LOADED, 2354 rows, 0 errors
+    raw_stage/consumption/dt=2026-10-28/H02.csv: LOADED, 2347 rows, 0 errors
+    raw_stage/consumption/dt=2026-10-29/H02.csv: LOADED, 26 rows, 0 errors
+    raw_stage/consumption/dt=2026-10-28/H12.csv: LOADED, 2348 rows, 0 errors
+    raw_stage/consumption/dt=2026-10-29/H07.csv: LOADED, 28 rows, 0 errors
+    raw_stage/consumption/dt=2026-10-29/H06.csv: LOADED, 25 rows, 0 errors
+    raw_stage/consumption/dt=2026-10-28/H11.csv: LOADED, 2323 rows, 0 errors
+    raw_stage/consumption/dt=2026-10-29/H10.csv: LOADED, 26 rows, 0 errors
+    raw_stage/consumption/dt=2026-10-28/H01.csv: LOADED, 2346 rows, 0 errors
+    raw_stage/consumption/dt=2026-10-29/H09.csv: LOADED, 26 rows, 0 errors
+    raw_stage/consumption/dt=2026-10-29/H08.csv: LOADED, 27 rows, 0 errors
+    raw_stage/consumption/dt=2026-10-28/H04.csv: LOADED, 2348 rows, 0 errors
+    raw_stage/consumption/dt=2026-10-29/H04.csv: LOADED, 27 rows, 0 errors
+    raw_stage/consumption/dt=2026-10-29/H03.csv: LOADED, 26 rows, 0 errors
+    raw_stage/consumption/dt=2026-10-29/H12.csv: LOADED, 26 rows, 0 errors
+    raw_stage/consumption/dt=2026-10-29/H11.csv: LOADED, 25 rows, 0 errors
+[s2_consumption_files] OK: 28422 rows read, 28422 rows loaded (batch s2_consumption_files-20261102T213006Z-ee7bd2)

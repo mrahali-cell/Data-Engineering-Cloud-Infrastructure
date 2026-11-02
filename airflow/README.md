@@ -56,6 +56,14 @@ Once Airflow runs the pipeline, suspend the Snowflake task so there is only one 
 | 2 · Files loaded twice | `cd ingestion && docker compose run --rm ingest python jobs/ingest_consumption_files.py --force`, then trigger | All green: silver keeps one copy of each line |
 | 3 · A source that is down | Admin → Variables: add `shortages_url` = `https://example.invalid/x`, trigger | `ingest_s4_shortages` retried twice then red; everything after it waits. Delete the Variable, **Clear** the task: the run finishes green |
 
+## Incident Results
+### Results (tested 2 Nov 2026)
+
+| Incident | Result | Proof |
+| --- | --- | --- |
+| 1 · Corrupted day | `quality_gate` red (≈45 %), gold not refreshed, dashboard kept day 3 | docs\Incident 1\failed_dag.png|
+| 2 · Files loaded twice | All green. Bronze: day 1–2 files ×2. Silver: 0 duplicates | docs\Incident 2\Incident_2_check_2026-11-02-2235_bronze.csv, docs\Incident 2\silver_after_incident.png|
+
 ## Start the simulation again from a clean state
 
 A rehearsed incident (or a day replayed by mistake) leaves broken rows in the simulated stock. To start over,
