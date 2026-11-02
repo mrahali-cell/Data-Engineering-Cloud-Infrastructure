@@ -1,4 +1,4 @@
--- MédiRelais · bronze tables for the 6 sources (run by: python jobs/bootstrap_snowflake.py)
+-- MédiRelais · bronze tables for the 4 sources (run by: python jobs/bootstrap_snowflake.py)
 -- Bronze keeps the data exactly as received: text columns, raw JSON, no cleaning.
 -- Every table carries _source / _source_file, _loaded_at and _batch_id (replay, debugging, freshness).
 -- Safe to run again: everything is CREATE ... IF NOT EXISTS.
@@ -17,8 +17,6 @@ CREATE FILE FORMAT IF NOT EXISTS MEDIRELAIS.BRONZE.FF_CSV_HEADER
 CREATE FILE FORMAT IF NOT EXISTS MEDIRELAIS.BRONZE.FF_TSV_RAW
     TYPE = CSV FIELD_DELIMITER = '\t' SKIP_HEADER = 0 FIELD_OPTIONALLY_ENCLOSED_BY = NONE
     ESCAPE_UNENCLOSED_FIELD = NONE ERROR_ON_COLUMN_COUNT_MISMATCH = FALSE ENCODING = 'UTF8';
--- JSON lines (sensors)
-CREATE FILE FORMAT IF NOT EXISTS MEDIRELAIS.BRONZE.FF_JSON TYPE = JSON STRIP_OUTER_ARRAY = FALSE;
 
 -- S1 · Pharmacy stock database (Postgres) - incremental pull + MERGE --------------------
 CREATE TABLE IF NOT EXISTS MEDIRELAIS.BRONZE.HOSPITALS_RAW (
@@ -46,6 +44,8 @@ CREATE TABLE IF NOT EXISTS MEDIRELAIS.BRONZE.BDPM_SPECIALITES_RAW (
     c8 VARCHAR, c9 VARCHAR, c10 VARCHAR, c11 VARCHAR, c12 VARCHAR, c13 VARCHAR, c14 VARCHAR,
     _source_file VARCHAR, _loaded_at TIMESTAMP_TZ, _batch_id VARCHAR);
 CREATE TABLE IF NOT EXISTS MEDIRELAIS.BRONZE.BDPM_PRESENTATIONS_RAW LIKE MEDIRELAIS.BRONZE.BDPM_SPECIALITES_RAW;
+-- CIS_COMPO_bdpm.txt: the substances (molecules) of each medicine, used to match by molecule
+CREATE TABLE IF NOT EXISTS MEDIRELAIS.BRONZE.BDPM_COMPOSITION_RAW LIKE MEDIRELAIS.BRONZE.BDPM_SPECIALITES_RAW;
 
 -- S4 · BDPM shortages file (real) - daily pull, change detection by row hash + MERGE
 CREATE TABLE IF NOT EXISTS MEDIRELAIS.BRONZE.SHORTAGES_RAW (
@@ -54,12 +54,5 @@ CREATE TABLE IF NOT EXISTS MEDIRELAIS.BRONZE.SHORTAGES_RAW (
     row_hash VARCHAR, first_seen_at TIMESTAMP_TZ, last_seen_at TIMESTAMP_TZ, still_listed BOOLEAN,
     _source_file VARCHAR, _batch_id VARCHAR);
 
--- S5 · Fridge sensors - JSON micro-batches, raw events in a VARIANT
-CREATE TABLE IF NOT EXISTS MEDIRELAIS.BRONZE.FRIDGE_READINGS_RAW (
-    payload VARIANT, _source_file VARCHAR, _file_row_number NUMBER,
-    _loaded_at TIMESTAMP_TZ, _batch_id VARCHAR);
-
--- S6 · Open-Meteo weather API (real) - one raw JSON response per hospital per call
-CREATE TABLE IF NOT EXISTS MEDIRELAIS.BRONZE.WEATHER_RAW (
-    hospital_id VARCHAR, request_url VARCHAR, payload VARIANT,
-    _loaded_at TIMESTAMP_TZ, _batch_id VARCHAR);
+-- S5 (fridge sensors) and S6 (weather API) were removed on 2 Nov 2026: the project keeps
+-- use cases 1 and 2 only. Their old tables (FRIDGE_READINGS_RAW, WEATHER_RAW) are no longer used.

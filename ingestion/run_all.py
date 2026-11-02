@@ -1,6 +1,6 @@
 """Run the whole ingestion for one day, in order, like the orchestrator will.
 
-  python run_all.py --day 1            generate day 1 at the hospitals, then ingest all 6 sources
+  python run_all.py --day 1            generate day 1 at the hospitals, then ingest all 4 sources
   python run_all.py --day 2
   python run_all.py --day 3 --incident corrupted
   python run_all.py --skip-generate    only ingest (files and database already there)
@@ -16,10 +16,8 @@ import sys
 JOBS = [
     ("S1 stock (Postgres, incremental)", ["python", "jobs/ingest_stock_postgres.py"]),
     ("S2 consumption (files, batch COPY)", ["python", "jobs/ingest_consumption_files.py"]),
-    ("S3 drug database (BDPM, weekly download)", ["python", "jobs/ingest_bdpm.py"]),
+    ("S3 drug database (BDPM: medicines + composition, weekly download)", ["python", "jobs/ingest_bdpm.py"]),
     ("S4 shortages (BDPM, change detection)", ["python", "jobs/ingest_shortages.py"]),
-    ("S5 fridge sensors (JSON micro-batch)", ["python", "jobs/ingest_fridge_sensors.py"]),
-    ("S6 weather (Open-Meteo API)", ["python", "jobs/ingest_weather_api.py"]),
 ]
 
 

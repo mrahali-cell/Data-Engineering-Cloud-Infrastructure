@@ -3,6 +3,10 @@
 Source: base-donnees-publique.medicaments.gouv.fr (ANSM / HAS / Assurance maladie), open licence.
   CIS_bdpm.txt      one row per medicine ("spécialité"): code CIS, name, form, route, status...
   CIS_CIP_bdpm.txt  one row per box ("présentation"): code CIS, CIP13 barcode, label, price...
+  CIS_COMPO_bdpm.txt one row per substance of a medicine: code CIS, substance name, dosage,
+                    nature (SA = active substance, FT = therapeutic fraction). Silver uses it to
+                    link our products to medicines by MOLECULE, so brand names such as Doliprane
+                    (paracetamol) or Lantus (insulin glargine) are found too.
 
 Why this method: reference data that changes a few times a month; a weekly full refresh is
 simpler and safer than tracking changes. The files are tab-separated, without header, and
@@ -20,7 +24,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from common import BRONZE, STAGE, run_job, with_retries  # noqa: E402
 
 BASE = "https://base-donnees-publique.medicaments.gouv.fr/download/file/"
-FILES = {"CIS_bdpm.txt": "BDPM_SPECIALITES_RAW", "CIS_CIP_bdpm.txt": "BDPM_PRESENTATIONS_RAW"}
+FILES = {
+    "CIS_bdpm.txt": "BDPM_SPECIALITES_RAW",
+    "CIS_CIP_bdpm.txt": "BDPM_PRESENTATIONS_RAW",
+    "CIS_COMPO_bdpm.txt": "BDPM_COMPOSITION_RAW",
+}
 WORK = Path(os.environ.get("LANDING_DIR", "landing")) / "bdpm"
 
 

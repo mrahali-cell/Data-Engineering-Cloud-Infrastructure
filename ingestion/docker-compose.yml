@@ -1,6 +1,6 @@
 # MédiRelais · local sources + ingestion
 #   docker compose up -d pharmacy-db                       start the hospitals' stock database (S1)
-#   docker compose run --rm ingest python run_all.py --day 1   simulate day 1 and ingest the 6 sources
+#   docker compose run --rm ingest python run_all.py --day 1   simulate day 1 and ingest the 4 sources
 # The password below is for a local throw-away database only.
 services:
   pharmacy-db:

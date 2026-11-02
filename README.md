@@ -25,7 +25,7 @@ The success fee aligns MédiRelais with the hospitals: it earns more only when l
 
 - **Team of 6:** CEO, hospital pharmacist (clinical lead), logistics coordinator, 2 data engineers, 1 account manager.
 - **Network:** 12 hospitals of one hospital group (GHT, *groupement hospitalier de territoire*), about 6,500 beds.
-- **Data:** each hospital pharmacy sends a nightly stock extract from its pharmacy system, plus daily consumption and orders. Fridges send temperature readings every 5 minutes.
+- **Data:** each hospital pharmacy sends a nightly stock extract from its pharmacy system, plus daily consumption and orders. National public data (drug database, shortages) completes it.
 - **Logistics:** transfers ride the group's existing courier route, twice a week, so no new trucks are needed.
 - **Stakeholders:**
   - hospital pharmacists, who decide and sign transfers;
@@ -49,7 +49,7 @@ The success fee aligns MédiRelais with the hospitals: it earns more only when l
 
 - Only batches with **30 days or more** left before expiry can be transferred.
 - Minimum transfer value is **€200**, so the courier trip is worth it.
-- Cold-chain products must prove they stayed between **2 °C and 8 °C** the whole time. Until the fridge data of use case 3 is loaded, the pipeline blocks every cold-chain batch and shows it as "no cold-chain proof".
+- Cold-chain products (insulin, vaccines...) would need proof they stayed between **2 °C and 8 °C** the whole time. We have no fridge data in this project, so they are **never** transferred and are shown as "no cold-chain proof".
 - Narcotics and recalled batches are **never** transferred.
 - Transfers stay **inside the hospital group**, under a pharmacist's responsibility.
 - **No patient data** is used: only stock, orders and consumption.
@@ -61,8 +61,6 @@ The success fee aligns MédiRelais with the hospitals: it earns more only when l
 Two use cases carry the business case:
 - the first saves medication that is about to expire;
 - the second stops hospitals from over-ordering in the first place.
-
-A third use case, cold-chain proof, is optional and adds a real-time sensor source.
 
 ### Use case 1 · Expiry alert and transfer matching (core)
 
@@ -93,14 +91,14 @@ saveable_value = SUM(usable_qty × unit_cost) of suggested transfers
 
 - **Grain:** one row per suggested batch × snapshot day.
 - **Daily use:** average over the last 28 days, counting only the days actually reported (a day whose line went to quarantine is unknown, not zero).
-- **Receiver:** among the other hospitals that use the product, the one that can use the most of the batch before it expires; ties broken by daily use, then hospital ID. A hospital that has run out of the product still counts. A batch no hospital can use in time gets no suggestion. Cold-chain batches only go to a hospital whose fridges stayed between 2 and 8 °C.
+- **Receiver:** among the other hospitals that use the product, the one that can use the most of the batch before it expires; ties broken by daily use, then hospital ID. A hospital that has run out of the product still counts. A batch no hospital can use in time gets no suggestion. Cold-chain batches are never suggested.
 - **Priority:** medicines in national shortage first (S4), then the largest saveable value.
 - **Assumption:** every hospital uses its soonest-expiring stock first. When several batches go to the same hospital, `can_use_before_expiry` checks whether it can use all of them, plus its own stock, in time.
 - **Value saved**, the base of the 10% success fee, counts the units that were actually transferred and used before expiry. It needs a register of real transfers, which is out of scope for this project. Saveable value is its forecast.
 
 **Acceptance test** (`tests/acceptance_planted_cases.sql`), on the generated dataset (seed 42, snapshot 28 Oct 2026), whose planted cases were checked by hand from the CSV files:
 - total value at risk is €146,658.16 over 20 batches, to the cent;
-- the H01 insulin and H02 rituximab batches are at risk but blocked until cold-chain proof;
+- the H01 insulin and H02 rituximab batches are at risk but never transferred (cold chain);
 - the 20-day ceftriaxone and the €6 furosemide batches are not transferable;
 - the narcotic, the recalled and the expired batches never appear;
 - no suggested transfer breaks a transfer rule (`tests/transfers_respect_rules.sql`).
@@ -129,42 +127,37 @@ days_of_cover = qty_on_hand / AVG(daily_consumption over the last 28 days)
 - H03 paracetamol, deliberately over-stocked in the test data, is flagged;
 - H07 epoetin (zero use) and H12 albumin (only 35 days of history) are excluded.
 
-### Use case 3 (optional) · Cold-chain proof
-
-| | |
-| --- | --- |
-| **Decision** | Can this fridge batch be transferred safely? |
-| **User** | The hospital pharmacist |
-| **Metric** | Share of time a fridge stayed between 2 °C and 8 °C per day (grain: fridge × day; gaps under 10 minutes ignored) |
-| **Frequency** | Every 15 minutes, since a fridge failure must be caught the same day |
-| **Acceptance test** | A temperature spike injected into the test data blocks the transfer of that fridge's batches |
-
 ---
 
 ## 3. Architecture
 
-*Diagram coming next: 6 sources → ingestion (Docker) → bronze / silver / gold (dbt in Snowflake) → dashboard (Streamlit).*
+*Diagram coming next: 4 sources → ingestion (Docker) → bronze / silver / gold (dbt in Snowflake) → dashboard (Streamlit).*
 
 ### Sources and ingestion
 
-Six sources, each with the ingestion method that fits it. All code is in [`ingestion/`](ingestion/) (one Docker image, one job per source).
+Four sources, each with the ingestion method that fits it. All code is in [`ingestion/`](ingestion/) (one Docker image, one job per source).
 
 | # | Source | Real? | Ingestion method | Bronze table(s) |
 | --- | --- | --- | --- | --- |
 | S1 | Pharmacy stock system (Postgres) | simulated, messy | incremental pull on `updated_at` + `MERGE` | `HOSPITALS_RAW`, `PRODUCTS_RAW`, `STOCK_RAW` |
 | S2 | Daily consumption files | simulated, messy | batch files → stage → `COPY INTO`, columns matched by name | `CONSUMPTION_RAW` |
-| S3 | BDPM public drug database | **real** | weekly download, full refresh | `BDPM_SPECIALITES_RAW`, `BDPM_PRESENTATIONS_RAW` |
+| S3 | BDPM public drug database: medicines, boxes and their molecules | **real** | weekly download, full refresh | `BDPM_SPECIALITES_RAW`, `BDPM_PRESENTATIONS_RAW`, `BDPM_COMPOSITION_RAW` |
 | S4 | BDPM shortages file | **real** | daily pull, change detection (row hash + `MERGE`) | `SHORTAGES_RAW` |
-| S5 | Fridge temperature sensors | simulated, messy | JSON micro-batches → `VARIANT` | `FRIDGE_READINGS_RAW` |
-| S6 | Open-Meteo weather API | **real** | REST API pull → `VARIANT` | `WEATHER_RAW` |
 
 Every bronze row carries `_source` (or `_source_file`), `_loaded_at` and `_batch_id`; every job run is logged in `MEDIRELAIS.BRONZE.LOAD_RUNS`.
+
+**Same medicine, different names.** S3 links each product to the national codes (CIS) of every medicine that contains
+its molecule: by the composition file (`CIS_COMPO_bdpm.txt`, which finds brand names such as Doliprane for paracetamol)
+and by name (generics such as "Paracétamol Biogaran"). That link is what joins our products to the shortage list (S4).
+
+*Scope change (2 Nov 2026): the project keeps use cases 1 and 2. The fridge sensors (cold chain, formerly use case 3) and
+the weather API were removed, so the pipeline has 4 sources.*
 
 ### Repository structure
 
 ```
 README.md            company, use cases, architecture, how to run, team
-ingestion/           6 sources -> bronze: source simulator, one job per source, Dockerfile, docker-compose
+ingestion/           4 sources -> bronze: source simulator, one job per source, Dockerfile, docker-compose
 medirelais_dbt/      dbt project: silver (cleaning, quarantine) and gold (metrics), tests
 snowflake/           setup and scheduling scripts
 streamlit/           dashboard
@@ -188,7 +181,7 @@ Bronze keeps every value as text, exactly as received, with `_source`, `_loaded_
 
 ## 4. How to run
 
-**Ingestion (6 sources → bronze)**, with Docker Desktop running. Details in [`ingestion/README.md`](ingestion/README.md).
+**Ingestion (4 sources → bronze)**, with Docker Desktop running. Details in [`ingestion/README.md`](ingestion/README.md).
 
 ```bash
 cd ingestion

@@ -26,3 +26,15 @@
 {% macro is_placeholder_date(column) -%}
     (YEAR({{ column }}) >= 2099)
 {%- endmacro %}
+
+-- "Paracétamol", "HÉPARINE sodique" -> "PARACETAMOL", "HEPARINE SODIQUE"
+-- (upper case without accents, so a substance is compared the same way in every file)
+{% macro normalize_text(column) -%}
+    TRANSLATE(UPPER(TRIM({{ column }})), 'ÀÂÄÁÃÉÈÊËÍÌÎÏÓÒÔÖÕÚÙÛÜÇÑ', 'AAAAAEEEEIIIIOOOOOUUUUCN')
+{%- endmacro %}
+
+-- TRUE when the keyword appears as a whole word (or words) in the text: "HEPARINE" matches
+-- "HEPARINE SODIQUE" but not "ENOXAPARINE" - both sides are normalized first
+{% macro contains_word(text, keyword) -%}
+    REGEXP_LIKE({{ normalize_text(text) }}, '(.*[^A-Z])?' || {{ keyword }} || '([^A-Z].*)?')
+{%- endmacro %}

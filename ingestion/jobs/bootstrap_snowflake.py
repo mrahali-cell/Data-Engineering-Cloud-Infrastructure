@@ -1,4 +1,4 @@
-"""Create the bronze tables, file formats and run log for the 6 sources (safe to run again)."""
+"""Create the bronze tables, file formats and run log for the 4 sources (safe to run again)."""
 import sys
 from pathlib import Path
 
