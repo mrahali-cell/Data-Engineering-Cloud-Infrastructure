@@ -55,3 +55,15 @@ Once Airflow runs the pipeline, suspend the Snowflake task so there is only one 
 | 1 · A corrupted day | Trigger with config `{"incident": "corrupted"}` | `quality_gate` red, `dbt_gold` and `run_report` not run: gold keeps yesterday's results |
 | 2 · Files loaded twice | `cd ingestion && docker compose run --rm ingest python jobs/ingest_consumption_files.py --force`, then trigger | All green: silver keeps one copy of each line |
 | 3 · A source that is down | Admin → Variables: add `shortages_url` = `https://example.invalid/x`, trigger | `ingest_s4_shortages` retried twice then red; everything after it waits. Delete the Variable, **Clear** the task: the run finishes green |
+
+## Start the simulation again from a clean state
+
+A rehearsed incident (or a day replayed by mistake) leaves broken rows in the simulated stock. To start over,
+with no DAG run in progress, from the `airflow` folder:
+
+```bash
+docker compose exec airflow /opt/airflow/ingest-venv/bin/python /opt/airflow/ingestion/jobs/reset_demo.py --yes
+```
+
+It empties the hospitals' database, the landing files and the 4 simulated bronze tables (the public data, the run log
+and the Airflow history are kept). Then trigger the DAG with `day` empty, once per day to replay: day 1, day 2, day 3...
