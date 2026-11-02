@@ -86,13 +86,16 @@ value_at_risk = SUM(qty_on_hand × unit_cost)
 **Metric 2 · Saveable value:** what the dashboard shows.
 
 ```
-saveable_value = SUM(qty_on_hand × unit_cost) of suggested transfers
-                 WHERE the receiving hospital can use the batch before it expires
+usable_qty     = MIN(qty_on_hand,
+                     receiver's daily use × days left − receiver's own stock that expires first)
+saveable_value = SUM(usable_qty × unit_cost) of suggested transfers
 ```
 
 - **Grain:** one row per suggested batch × snapshot day.
-- **Receiver:** the hospital (other than the sender) that uses the most of the product over the last 28 days, ties broken by hospital ID. A hospital that has run out of the product still counts.
-- **Assumption:** the receiver uses its soonest-expiring stock first. When several batches go to the same hospital, they queue up together with its own stock, so a batch counts only if everything ahead of it, plus the batch itself, is used before it expires.
+- **Daily use:** average over the last 28 days, counting only the days actually reported (a day whose line went to quarantine is unknown, not zero).
+- **Receiver:** among the other hospitals that use the product, the one that can use the most of the batch before it expires; ties broken by daily use, then hospital ID. A hospital that has run out of the product still counts. A batch no hospital can use in time gets no suggestion. Cold-chain batches only go to a hospital whose fridges stayed between 2 and 8 °C.
+- **Priority:** medicines in national shortage first (S4), then the largest saveable value.
+- **Assumption:** every hospital uses its soonest-expiring stock first. When several batches go to the same hospital, `can_use_before_expiry` checks whether it can use all of them, plus its own stock, in time.
 - **Value saved**, the base of the 10% success fee, counts the units that were actually transferred and used before expiry. It needs a register of real transfers, which is out of scope for this project. Saveable value is its forecast.
 
 **Acceptance test** (`tests/acceptance_planted_cases.sql`), on the generated dataset (seed 42, snapshot 28 Oct 2026), whose planted cases were checked by hand from the CSV files:

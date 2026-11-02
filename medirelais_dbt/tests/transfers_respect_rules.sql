@@ -1,7 +1,8 @@
 -- Business rule test: every suggested transfer must follow the README transfer rules:
 -- at least 30 days left, worth at least 200 EUR, never a narcotic, a recalled or an
 -- expired batch, never to the same hospital, and a cold-chain medicine only between two
--- hospitals whose fridges stayed between 2 and 8 °C (silver_cold_chain_status).
+-- hospitals whose fridges stayed between 2 and 8 °C (silver_cold_chain_status), and only
+-- when the receiver can use some of it before it expires (never more than the batch holds).
 -- The test FAILS if this query returns rows.
 SELECT t.*
 FROM {{ ref('gold_transfer_suggestions') }} t
@@ -20,4 +21,6 @@ WHERE t.days_to_expiry < 30
    OR s.is_recalled
    OR s.is_expired
    OR t.from_hospital_id = t.to_hospital_id
+   OR t.usable_qty_before_expiry <= 0
+   OR t.usable_qty_before_expiry > t.qty_on_hand
    OR (s.is_cold_chain AND NOT (COALESCE(cf.cold_chain_ok, FALSE) AND COALESCE(ct.cold_chain_ok, FALSE)))

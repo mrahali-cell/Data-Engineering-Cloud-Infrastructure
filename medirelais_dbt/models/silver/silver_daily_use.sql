@@ -2,6 +2,10 @@
 -- The window is anchored on each snapshot's own date, with an upper bound, so
 -- re-running an old day gives the same answer (it used to be MAX(snapshot_date)).
 -- Grain: snapshot day x hospital x product. Feeds days of cover and transfer receivers.
+-- The average is taken over the days actually reported: a day whose line went to quarantine
+-- is unknown, not zero, so dividing by 28 would understate use (and overstate days of cover).
+-- Every file lists every product every day (a zero-use day is a row with 0), so a missing
+-- day really is a missing value.
 WITH snapshots AS (
     SELECT DISTINCT snapshot_date FROM {{ ref('silver_stock') }}
 ),
@@ -14,7 +18,7 @@ SELECT
     d.snapshot_date,
     c.hospital_id,
     c.product_id,
-    SUM(c.qty_used) / 28.0                                       AS avg_daily_use,
+    SUM(c.qty_used) / COUNT(DISTINCT c.consumption_date)         AS avg_daily_use,
     COUNT(DISTINCT c.consumption_date)                           AS days_reported,
     DATEDIFF('day', f.first_consumption_date, d.snapshot_date)   AS days_of_history
 FROM snapshots d

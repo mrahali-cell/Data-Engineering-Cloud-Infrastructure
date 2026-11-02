@@ -129,12 +129,23 @@ models:
         tests: [not_null]
 
   - name: gold_transfer_suggestions
-    description: "Use case 1 - where to send each transferable batch"
+    description: "Use case 1 - where to send each transferable batch: the hospital that can use the most of it before it expires"
     tests:
       - unique:
           column_name: "snapshot_date || '|' || batch_id"
+      - unique:
+          column_name: "snapshot_date || '|' || priority_rank"
     columns:
       - name: batch_id
         tests: [not_null]
       - name: to_hospital_id
+        tests: [not_null]
+      - name: usable_qty_before_expiry
+        description: "Units the receiver can use before the batch expires, after its own stock that expires first"
+        tests: [not_null]
+      - name: saveable_value_eur
+        description: "usable_qty_before_expiry x unit cost: the value the transfer saves from expiry"
+        tests: [not_null]
+      - name: priority_rank
+        description: "1 = handle first: medicines in national shortage first, then the largest saveable value"
         tests: [not_null]
