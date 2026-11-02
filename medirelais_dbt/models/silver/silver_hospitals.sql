@@ -1,9 +1,11 @@
--- One row per hospital, typed from the all-text bronze table.
--- If the file was loaded more than once, the latest load wins.
+-- One row per hospital (S1, already typed in the source database).
+-- If the hospital was loaded more than once, the latest load wins.
 SELECT
-    hospital_id,
+    {{ clean_code('hospital_id') }} AS hospital_id,
     hospital_name,
     city,
-    TRY_TO_NUMBER(beds) AS beds
-FROM {{ source('bronze', 'hospitals') }}
-QUALIFY ROW_NUMBER() OVER (PARTITION BY hospital_id ORDER BY _loaded_at DESC) = 1
+    beds,
+    latitude,
+    longitude
+FROM {{ source('bronze', 'hospitals_raw') }}
+QUALIFY ROW_NUMBER() OVER (PARTITION BY {{ clean_code('hospital_id') }} ORDER BY _loaded_at DESC) = 1

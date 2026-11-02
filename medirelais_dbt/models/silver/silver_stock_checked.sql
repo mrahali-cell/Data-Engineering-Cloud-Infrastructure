@@ -1,24 +1,41 @@
 {{ config(materialized='ephemeral') }}
--- Every bronze stock row, typed, with the reason it is rejected (NULL = clean).
+-- Every bronze stock row (S1), cleaned and typed, with the reason it is rejected (NULL = clean).
 -- silver_stock keeps the clean rows, silver_stock_quarantine keeps the rest:
 -- no row disappears without a reason.
-WITH typed AS (
+--
+-- Snapshot date: S1 is pulled incrementally and merged on batch_id, so bronze holds the
+-- latest state of every batch. That state is the stock "as of" the latest business day,
+-- which is the date of the latest daily delivery (the dt= folder of the consumption files).
+WITH business_day AS (
+    SELECT MAX(TRY_TO_DATE(REGEXP_SUBSTR(_source_file, 'dt=([0-9-]+)', 1, 1, 'e', 1))) AS snapshot_date
+    FROM {{ source('bronze', 'consumption_raw') }}
+),
+typed AS (
     SELECT
-        s.snapshot_date                   AS raw_snapshot_date,
-        s.qty_on_hand                     AS raw_qty_on_hand,
-        s.expiry_date                     AS raw_expiry_date,
-        s.is_recalled                     AS raw_is_recalled,
-        TRY_TO_DATE(s.snapshot_date)      AS snapshot_date,
-        s.hospital_id,
-        s.product_id,
+        b.snapshot_date,
+        s.qty_on_hand                          AS raw_qty_on_hand,
+        s.expiry_date                          AS raw_expiry_date,
+        s.is_recalled                          AS raw_is_recalled,
+        s.hospital_id                          AS raw_hospital_id,
+        s.product_id                           AS raw_product_id,
+        {{ clean_code('s.hospital_id') }}      AS hospital_id,
+        {{ clean_code('s.product_id') }}       AS product_id,
         s.batch_id,
-        TRY_TO_NUMBER(s.qty_on_hand)      AS qty_on_hand,
-        TRY_TO_DATE(s.expiry_date)        AS expiry_date,
-        TRY_TO_BOOLEAN(s.is_recalled)     AS is_recalled,
+        {{ clean_quantity('s.qty_on_hand') }}  AS qty_on_hand,
+        {{ clean_date('s.expiry_date') }}      AS expiry_date,
+        TRY_TO_BOOLEAN(TRIM(s.is_recalled))    AS is_recalled,
         s._source,
         s._loaded_at,
         s._batch_id
-    FROM {{ source('bronze', 'stock') }} s
+    FROM {{ source('bronze', 'stock_raw') }} s
+    CROSS JOIN business_day b
+),
+-- What a normal batch looks like for each product, to catch impossible values (x1000 typos)
+typical AS (
+    SELECT product_id, MEDIAN(qty_on_hand) AS median_qty
+    FROM typed
+    WHERE qty_on_hand > 0
+    GROUP BY product_id
 ),
 checked AS (
     SELECT
@@ -30,19 +47,22 @@ checked AS (
         p.is_cold_chain,
         p.is_narcotic,
         CASE
-            WHEN t.snapshot_date IS NULL THEN 'bad_snapshot_date'
-            WHEN t.batch_id      IS NULL THEN 'missing_batch_id'
-            WHEN h.hospital_id   IS NULL THEN 'unknown_hospital'
-            WHEN p.product_id    IS NULL THEN 'unknown_product'
-            WHEN t.qty_on_hand   IS NULL THEN 'bad_quantity'
-            WHEN t.qty_on_hand   < 0     THEN 'negative_quantity'
-            WHEN t.qty_on_hand   = 0     THEN 'zero_quantity'
-            WHEN t.expiry_date   IS NULL THEN 'bad_expiry_date'
-            WHEN t.is_recalled   IS NULL THEN 'bad_recall_flag'
+            WHEN t.snapshot_date IS NULL                  THEN 'bad_snapshot_date'
+            WHEN t.batch_id      IS NULL                  THEN 'missing_batch_id'
+            WHEN h.hospital_id   IS NULL                  THEN 'unknown_hospital'
+            WHEN p.product_id    IS NULL                  THEN 'unknown_product'
+            WHEN t.qty_on_hand   IS NULL                  THEN 'bad_quantity'
+            WHEN t.qty_on_hand   < 0                      THEN 'negative_quantity'
+            WHEN t.qty_on_hand   = 0                      THEN 'zero_quantity'
+            WHEN t.qty_on_hand   > 50 * ty.median_qty     THEN 'implausible_quantity'
+            WHEN t.expiry_date   IS NULL                  THEN 'bad_expiry_date'
+            WHEN {{ is_placeholder_date('t.expiry_date') }} THEN 'placeholder_expiry_date'
+            WHEN t.is_recalled   IS NULL                  THEN 'bad_recall_flag'
         END AS failed_check
     FROM typed t
     LEFT JOIN {{ ref('silver_hospitals') }} h ON t.hospital_id = h.hospital_id
     LEFT JOIN {{ ref('silver_products') }}  p ON t.product_id  = p.product_id
+    LEFT JOIN typical                       ty ON t.product_id = ty.product_id
 )
 SELECT
     *,
