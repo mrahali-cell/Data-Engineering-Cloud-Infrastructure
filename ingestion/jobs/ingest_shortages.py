@@ -8,7 +8,8 @@ Why this method: the file is republished as a full list, but only a few lines ch
 We hash every line: new hash -> new row (first_seen_at = now); hash seen again -> last_seen_at
 is updated; hash no longer in the file -> still_listed = FALSE (the shortage ended).
 That keeps the full history of each shortage without ever duplicating a line.
-Business use: a hospital should not give away a medicine that is in national shortage.
+Business use: a medicine in national shortage must not be wasted, so its batches at risk of
+expiring are offered to the network first (silver_product_reference, gold_transfer_suggestions).
 """
 import hashlib
 import os
