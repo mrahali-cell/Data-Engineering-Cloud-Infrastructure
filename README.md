@@ -157,6 +157,7 @@ the weather API were removed, so the pipeline has 4 sources.*
 
 ```
 README.md            company, use cases, architecture, how to run, team
+airflow/             orchestration: the daily DAG, its check scripts, docker-compose
 ingestion/           4 sources -> bronze: source simulator, one job per source, Dockerfile, docker-compose
 medirelais_dbt/      dbt project: silver (cleaning, quarantine) and gold (metrics), tests
 snowflake/           setup and scheduling scripts
@@ -220,6 +221,10 @@ GitHub (code)  ->  your laptop: Docker runs the job  ->  Snowflake BRONZE (data)
    `MEDIRELAIS.BRONZE.LOAD_RUNS`: status, rows read, rows loaded. Rows read = rows loaded means nothing was lost.
 5. The jobs only fill **bronze**. Silver and gold are built by dbt **inside Snowflake**: every day at 06:00 by the task
    `DAILY_PIPELINE`, or at once with `run_all.py --dbt`.
+
+**Orchestration (Airflow).** Every morning at 06:00, the DAG `medirelais_daily` runs the 4 ingestion jobs in parallel,
+checks them, builds silver, runs a quality gate, then builds gold; a failed step is retried, then stops everything after
+it. Setup, tasks and incident demos: [`airflow/README.md`](airflow/README.md).
 
 **Deploying new dbt code** (after a merge that changes `medirelais_dbt/`): run `snowflake/03_schedule.sql` as
 `MEDIRELAIS_PIPELINE`. It pulls `main` from GitHub, redeploys the dbt project and runs it. If the merge also adds a

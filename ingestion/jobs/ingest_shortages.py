@@ -21,7 +21,9 @@ import requests
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from common import BRONZE, STAGE, run_job, with_retries  # noqa: E402
 
-URL = "https://base-donnees-publique.medicaments.gouv.fr/download/file/CIS_CIP_Dispo_Spec.txt"
+# SHORTAGES_URL overrides the address: Airflow uses it for incident demo 3 (a source that is down)
+URL = (os.environ.get("SHORTAGES_URL")
+       or "https://base-donnees-publique.medicaments.gouv.fr/download/file/CIS_CIP_Dispo_Spec.txt")
 WORK = Path(os.environ.get("LANDING_DIR", "landing")) / "shortages"
 
 
