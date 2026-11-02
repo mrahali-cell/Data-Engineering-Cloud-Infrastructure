@@ -191,6 +191,54 @@ docker compose up -d pharmacy-db
 docker compose run --rm ingest python run_all.py --day 1    # then --day 2, 3...
 ```
 
+**After every `git pull`**, rebuild the image before running anything: the code is copied *into* the image, so
+without a rebuild Docker keeps running the old code.
+
+```bash
+git checkout main && git pull
+cd ingestion
+docker compose build ingest                 # puts the new code in the image
+docker compose run --rm ingest python jobs/bootstrap_snowflake.py   # creates any new bronze table (safe to re-run)
+```
+
+**What happens when you run an ingestion command**
+
+```
+GitHub (code)  ->  your laptop: Docker runs the job  ->  Snowflake BRONZE (data)  ->  dbt in Snowflake (silver, gold)
+```
+
+1. `docker compose run --rm ingest ...` starts a container from the `medirelais-ingest` image (Python, libraries and
+   the code), after checking that the hospitals' Postgres database (`pharmacy-db`) is up.
+2. The job connects to Snowflake with your key pair: `.env` says which account, user and role, and `keys/rsa_key.p8`
+   proves it is you. No password.
+3. Each job gets its data the way its source works:
+   - S1: reads only the stock rows changed since the last run, then `MERGE`;
+   - S2: uploads the nightly files to a stage, then `COPY INTO`;
+   - S3: downloads the 3 BDPM files, then `TRUNCATE` + `COPY INTO` (weekly full refresh);
+   - S4: downloads the shortage list, hashes each row and `MERGE`s to see what is new or ended.
+4. Every row gets `_source_file` (or `_source`), `_loaded_at` and `_batch_id`, and the job writes one line to
+   `MEDIRELAIS.BRONZE.LOAD_RUNS`: status, rows read, rows loaded. Rows read = rows loaded means nothing was lost.
+5. The jobs only fill **bronze**. Silver and gold are built by dbt **inside Snowflake**: every day at 06:00 by the task
+   `DAILY_PIPELINE`, or at once with `run_all.py --dbt`.
+
+**Deploying new dbt code** (after a merge that changes `medirelais_dbt/`): run `snowflake/03_schedule.sql` as
+`MEDIRELAIS_PIPELINE`. It pulls `main` from GitHub, redeploys the dbt project and runs it. If the merge also adds a
+bronze table, run the ingestion steps above first, or dbt fails because the table does not exist yet.
+
+**Looking at the data in Snowflake**
+
+- Browse: in a workspace, the **Databases** tab (next to Workspaces) → **MEDIRELAIS → BRONZE / SILVER / GOLD → Tables**;
+  or **Catalog → Database Explorer** in the left menu, open a table, then **Data Preview**.
+- Query: open a worksheet, pick the role `SYSADMIN` and the warehouse `MEDIRELAIS_WH`, then for example:
+
+```sql
+SELECT * FROM MEDIRELAIS.BRONZE.LOAD_RUNS ORDER BY run_at DESC;                      -- last ingestion runs
+SELECT * FROM MEDIRELAIS.SILVER.SILVER_STOCK_QUARANTINE;                             -- rejected rows and why
+SELECT * FROM MEDIRELAIS.SILVER.SILVER_PRODUCT_REFERENCE;                            -- national codes, shortages
+SELECT * FROM MEDIRELAIS.GOLD.GOLD_TRANSFER_SUGGESTIONS ORDER BY snapshot_date DESC, priority_rank;
+SELECT * FROM MEDIRELAIS.GOLD.GOLD_DAYS_OF_COVER WHERE is_overstock_alert;
+```
+
 **First CSV version** (kept until silver is moved to the new bronze tables):
 
 1. `python generate_data.py` writes the CSV files to `data/`.
