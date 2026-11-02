@@ -16,6 +16,12 @@ variable "snowflake_user" {
   default     = "TERRAFORM"
 }
 
+variable "archive_use_storage_integration" {
+  description = "true = Snowflake reaches the archive bucket through the IAM role (keyless). false = through a bucket-only IAM user, while the AWS Free plan blocks the role (see archive.tf)"
+  type        = bool
+  default     = false
+}
+
 variable "snowflake_private_key_path" {
   description = "Path to the user's private key; the file stays out of git (terraform/keys/)"
   type        = string

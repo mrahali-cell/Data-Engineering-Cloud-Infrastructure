@@ -4,8 +4,7 @@ Why this method: consumption is reported once a night per hospital as a file; th
 (what to order, what to transfer) is daily, so batch is enough and cheap to replay.
 
   landing/consumption/dt=YYYY-MM-DD/H01.csv ... H12.csv
-    -> uploaded to a stage: the GCS bucket if GCS_BUCKET is set (cloud landing zone),
-       otherwise Snowflake's internal stage RAW_STAGE
+    -> uploaded to Snowflake's internal stage RAW_STAGE
     -> COPY INTO BRONZE.CONSUMPTION_RAW, columns matched BY NAME (a renamed column lands in its
        own column instead of breaking the load: schema drift stays visible)
 
@@ -18,21 +17,9 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from common import BRONZE, STAGE, run_job, with_retries  # noqa: E402
+from common import BRONZE, STAGE, run_job  # noqa: E402
 
 LANDING = Path(os.environ.get("LANDING_DIR", "landing")) / "consumption"
-GCS_BUCKET = os.environ.get("GCS_BUCKET")                    # e.g. medirelais-landing
-GCS_STAGE = f"{BRONZE}.GCS_STAGE"                            # external stage created with the integration
-
-
-def upload_to_gcs(files):
-    from google.cloud import storage                          # only needed in GCS mode
-    bucket = storage.Client().bucket(GCS_BUCKET)
-    for f in files:
-        blob = bucket.blob(f"consumption/{f.parent.name}/{f.name}")
-        if not blob.exists():
-            with_retries(lambda: blob.upload_from_filename(str(f)), what=f"upload {f.name}")
-    return f"@{GCS_STAGE}/consumption/"
 
 
 def upload_to_internal_stage(cur, files):
@@ -48,7 +35,7 @@ def make_body(force):
         if not files:
             raise FileNotFoundError(f"no files in {LANDING}: run generate_sources.py first")
         lines = sum(1 for f in files for _ in f.open(encoding="utf-8")) - len(files)
-        source = upload_to_gcs(files) if GCS_BUCKET else upload_to_internal_stage(cur, files)
+        source = upload_to_internal_stage(cur, files)
         print(f"  {len(files)} files ({lines} lines) available in {source}")
         cur.execute(f"""
             COPY INTO {BRONZE}.CONSUMPTION_RAW FROM {source}

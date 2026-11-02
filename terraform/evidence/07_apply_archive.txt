@@ -1,0 +1,9 @@
+snowflake_storage_integration_aws.archive: Creation complete after 1s [id=MEDIRELAIS_ARCHIVE_INT]
+aws_iam_role.snowflake_archive: Creation complete after 1s [id=medirelais-snowflake-archive]
+aws_iam_role_policy.snowflake_archive: Creation complete after 0s [id=medirelais-snowflake-archive:archive-bucket-access]
+snowflake_stage_external_s3.archive: Creation complete after 1s [id="MEDIRELAIS"."BRONZE"."ARCHIVE_STAGE"]
+snowflake_grant_privileges_to_account_role.pipeline_archive_stage: Creating...
+snowflake_grant_privileges_to_account_role.pipeline_archive_stage: Creation complete after 0s [id="MEDIRELAIS_PIPELINE"|false|false|USAGE|OnSchemaObject|OnObject|STAGE|"MEDIRELAIS"."BRONZE"."ARCHIVE_STAGE"]
+Apply complete! Resources: 5 added, 0 changed, 0 destroyed.
+archive_bucket = "medirelais-archive-036158683687"
+archive_stage = "\"MEDIRELAIS\".\"BRONZE\".\"ARCHIVE_STAGE\""

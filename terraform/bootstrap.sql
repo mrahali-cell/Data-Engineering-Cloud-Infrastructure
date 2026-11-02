@@ -24,3 +24,7 @@ $$;
 
 -- Check: type = SERVICE, has_rsa_public_key = true
 SHOW USERS LIKE 'TERRAFORM';
+
+-- Archive step (archive.tf): SYSADMIN may create storage integrations.
+-- Only ACCOUNTADMIN can grant this account-level privilege, so it stays a manual step.
+GRANT CREATE INTEGRATION ON ACCOUNT TO ROLE SYSADMIN;

@@ -7,7 +7,7 @@ to each row, and logs its run (success or failure) in `MEDIRELAIS.BRONZE.LOAD_RU
 | # | Source | Real? | Method | Bronze table(s) | Job |
 |---|---|---|---|---|---|
 | S1 | Pharmacy stock system (Postgres) | simulated, messy | incremental pull on `updated_at` + `MERGE` | `HOSPITALS_RAW`, `PRODUCTS_RAW`, `STOCK_RAW` | `jobs/ingest_stock_postgres.py` |
-| S2 | Daily consumption files | simulated, messy | batch files → stage (GCS or internal) → `COPY INTO`, columns by name | `CONSUMPTION_RAW` | `jobs/ingest_consumption_files.py` |
+| S2 | Daily consumption files | simulated, messy | batch files → internal stage → `COPY INTO`, columns by name | `CONSUMPTION_RAW` | `jobs/ingest_consumption_files.py` |
 | S3 | BDPM public drug database: medicines, boxes and their molecules | **real** | weekly download, full refresh | `BDPM_SPECIALITES_RAW`, `BDPM_PRESENTATIONS_RAW`, `BDPM_COMPOSITION_RAW` | `jobs/ingest_bdpm.py` |
 | S4 | BDPM shortages file | **real** | daily pull, change detection (row hash + `MERGE`) | `SHORTAGES_RAW` | `jobs/ingest_shortages.py` |
 
@@ -47,6 +47,4 @@ SELECT * FROM MEDIRELAIS.BRONZE.LOAD_RUNS ORDER BY run_at DESC;
   (`c1`, `c2`...); silver names them using the official format description.
 - The composition file (`CIS_COMPO_bdpm.txt`) gives the molecules of each medicine. Silver uses it to link our products
   to every medicine that contains the same molecule, whatever its brand name (Doliprane → paracetamol).
-- S2 uses Snowflake's internal stage by default. To land the files in Google Cloud Storage instead, create the bucket,
-  run `sql/gcs_stage.sql`, then set `GCS_BUCKET` and `GOOGLE_APPLICATION_CREDENTIALS` in `.env`.
 - Re-running any job is safe: `MERGE` on keys, and `COPY` skips files it already loaded.

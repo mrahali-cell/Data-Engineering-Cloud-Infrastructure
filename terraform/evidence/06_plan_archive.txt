@@ -1,0 +1,6 @@
+  # aws_iam_role.snowflake_archive will be created
+  # aws_iam_role_policy.snowflake_archive will be created
+  # snowflake_grant_privileges_to_account_role.pipeline_archive_stage will be created
+  # snowflake_stage_external_s3.archive will be created
+  # snowflake_storage_integration_aws.archive will be created
+Plan: 5 to add, 0 to change, 0 to destroy.

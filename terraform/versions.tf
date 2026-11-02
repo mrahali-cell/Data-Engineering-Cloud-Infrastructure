@@ -9,6 +9,10 @@ terraform {
       source  = "snowflakedb/snowflake"
       version = "~> 2.22"
     }
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 6.0"
+    }
   }
 
   backend "s3" {

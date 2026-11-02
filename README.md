@@ -253,17 +253,6 @@ SELECT * FROM MEDIRELAIS.GOLD.GOLD_DAYS_OF_COVER WHERE is_overstock_alert;
 
 Steps 3 and 4 run as `MEDIRELAIS_PIPELINE`, never as `ACCOUNTADMIN`.
 
-**Upgrading an account set up before 1 Nov 2026.** The old bronze tables were typed and have no `_source`, `_loaded_at` or `_batch_id`, and the files were regenerated. Once, before step 3:
-
-```sql
-USE ROLE SYSADMIN;
-DROP TABLE MEDIRELAIS.BRONZE.HOSPITALS;   -- bronze is rebuilt from the files in the stage
-DROP TABLE MEDIRELAIS.BRONZE.PRODUCTS;
-DROP TABLE MEDIRELAIS.BRONZE.STOCK;
-DROP TABLE MEDIRELAIS.BRONZE.CONSUMPTION;
--- then re-run 01_setup.sql, and upload the new CSV files with PUT ... OVERWRITE = TRUE
-```
-
 ## Team
 
 Atoui Soumaya 

@@ -9,7 +9,7 @@ keys/
 credentials*.json
 service-account*.json
 
-# Terraform state and local variables (the state lives in the remote GCS backend)
+# Terraform state and local variables (the state lives in the remote S3 backend)
 *.tfstate
 *.tfstate.*
 .terraform/

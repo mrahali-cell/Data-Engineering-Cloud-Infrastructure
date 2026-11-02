@@ -1,0 +1,8 @@
+# Archive test (2 Nov), run in Snowflake:
+# COPY INTO @MEDIRELAIS.BRONZE.ARCHIVE_STAGE/test/hospitals_ FROM (SELECT * EXCLUDE (_loaded_at), CONVERT_TIMEZONE('UTC', _loaded_at)::TIMESTAMP_NTZ AS _loaded_at_utc FROM MEDIRELAIS.BRONZE.HOSPITALS) FILE_FORMAT = (TYPE = PARQUET) HEADER = TRUE;
+# Snowflake: rows_unloaded = 12, output_bytes = 2340
+# aws s3 ls s3://medirelais-archive-036158683687/test/  (encrypted AES256, STANDARD class until day 90):
+2026-11-02 20:44:15       2340 hospitals__0_0_0.snappy.parquet
+
+# DAG archive SQL, tested with ds = 2026-11-02: rows_unloaded = 28737, output_bytes = 91805
+2026-11-02 20:45:20      91805 consumption_raw/dt=2026-11-02/data_0_0_0.snappy.parquet

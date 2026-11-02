@@ -30,8 +30,8 @@ resource "snowflake_schema" "layer" {
   database = snowflake_database.medirelais.name
   name     = each.key
 
-  # Written explicitly: left unset, the provider plans to recreate the schema, which
-  # would drop every table in it. prevent_destroy below caught that on the first plan.
+  # Written explicitly: left unset, the provider plans to recreate the schema,
+  # which would drop every table in it.
   is_transient        = false
   with_managed_access = false
 

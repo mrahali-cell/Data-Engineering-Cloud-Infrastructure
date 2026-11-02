@@ -9,6 +9,19 @@ provider "snowflake" {
   role              = "SYSADMIN"
 }
 
+# AWS: credentials come from the environment (AWS_PROFILE), never from the code.
+# eu-north-1 is the only region the account's guardrail policy allows.
+provider "aws" {
+  region = "eu-north-1"
+
+  default_tags {
+    tags = {
+      project    = "medirelais"
+      managed_by = "terraform"
+    }
+  }
+}
+
 provider "snowflake" {
   alias             = "security"
   organization_name = var.snowflake_organization
