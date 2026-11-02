@@ -1,0 +1,4 @@
+snowflake_warehouse.medirelais: Modifying... [id="MEDIRELAIS_WH"]
+snowflake_warehouse.medirelais: Modifications complete after 0s [id="MEDIRELAIS_WH"]
+Apply complete! Resources: 0 added, 1 changed, 0 destroyed.
+No changes. Your infrastructure matches the configuration.

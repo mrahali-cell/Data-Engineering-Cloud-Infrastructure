@@ -1,0 +1,4 @@
+# Someone changed AUTO_SUSPEND to 300 by hand in Snowsight. terraform plan:
+  # snowflake_warehouse.medirelais will be updated in-place
+      ~ auto_suspend                        = 300 -> 60
+Plan: 0 to add, 1 to change, 0 to destroy.
