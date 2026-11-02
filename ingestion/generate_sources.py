@@ -2,13 +2,12 @@
 MédiRelais - source simulator (the "hospital side" of the pipeline)
 
 Real hospitals do not send clean data. This script plays the role of the
-12 hospital pharmacies and produces 3 of our 6 sources, damaged on purpose:
+12 hospital pharmacies and produces 2 of our 4 sources, damaged on purpose:
 
   S1  Pharmacy stock system  -> a Postgres database (schema "pharmacy")
   S2  Daily consumption files -> CSV files in landing/consumption/dt=YYYY-MM-DD/
-  S5  Fridge sensors          -> JSON-lines files in landing/sensors/dt=YYYY-MM-DD/
 
-(S3 drug database, S4 shortages and S6 weather are REAL public sources:
+(S3 drug database and S4 shortages are REAL public sources:
  they are downloaded by their own ingestion jobs.)
 
 Each run simulates ONE day:
@@ -92,7 +91,6 @@ PRODUCTS = [
     ("P024", "Sodium chloride 0.9% 500ml", "Fluids", 1.10, False, False, 30, "CHLORURE DE SODIUM"),
     ("P025", "Glucose 5% 500ml", "Fluids", 1.20, False, False, 12, "GLUCOSE"),
 ]
-FRIDGES_PER_HOSPITAL = 2
 
 
 # ---------------------------------------------------------------------------
@@ -309,42 +307,13 @@ def write_consumption(day, today, mess, rng, profile, corrupted):
 
 
 # ---------------------------------------------------------------------------
-# S5 - fridge temperature sensors (JSON lines, one reading every 5 minutes)
-# ---------------------------------------------------------------------------
-def write_sensors(day, today, mess, rng):
-    folder = LANDING / "sensors" / f"dt={today.isoformat()}"
-    folder.mkdir(parents=True, exist_ok=True)
-    start = datetime(today.year, today.month, today.day, tzinfo=timezone.utc) - timedelta(days=1)
-    total = 0
-    # One fridge breaks down for 2 hours on day 2 (use case 3: cold chain)
-    broken = ("H04", 1) if day == 2 else None
-    with open(folder / "readings.jsonl", "w", encoding="utf-8") as f:
-        for h_id, *_ in HOSPITALS:
-            for fridge in range(1, FRIDGES_PER_HOSPITAL + 1):
-                for step in range(0, 24 * 60, 5):
-                    ts = start + timedelta(minutes=step)
-                    temp = round(rng.gauss(5.0, 0.7), 2)
-                    if broken == (h_id, fridge) and 600 <= step < 720:
-                        temp = round(rng.uniform(9, 12), 2)
-                    event = {"device_id": f"{h_id}-FRIDGE-{fridge}", "hospital_id": h_id,
-                             "ts": ts.isoformat().replace("+00:00", "Z"), "temp_c": temp}
-                    if mess.hit():                      # a firmware version sends other keys
-                        mess.issues["sensors: renamed keys (TEMP, timestamp)"] += 1
-                        event = {"device_id": event["device_id"], "hospital_id": h_id,
-                                 "timestamp": int(ts.timestamp()), "TEMP": temp}
-                    f.write(json.dumps(event) + "\n")
-                    total += 1
-    return total
-
-
-# ---------------------------------------------------------------------------
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--day", type=int, default=1)
     ap.add_argument("--mess", choices=MESS_RATES, default="medium")
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--incident", choices=["none", "corrupted"], default="none")
-    ap.add_argument("--skip-postgres", action="store_true", help="only write the files (S2, S5)")
+    ap.add_argument("--skip-postgres", action="store_true", help="only write the files (S2)")
     a = ap.parse_args()
 
     rng = random.Random(a.seed * 1000 + a.day)
@@ -361,8 +330,6 @@ def main():
         print(f"  S1 Postgres pharmacy.stock_batches: {n} rows inserted or updated")
     n = write_consumption(a.day, today, mess, rng, profile, corrupted)
     print(f"  S2 consumption files: {n} lines in {LANDING}/consumption/dt={today}/")
-    n = write_sensors(a.day, today, mess, rng)
-    print(f"  S5 sensor readings: {n} events in {LANDING}/sensors/dt={today}/")
 
     report = LANDING / "issues" / f"day_{a.day}.json"
     report.parent.mkdir(parents=True, exist_ok=True)

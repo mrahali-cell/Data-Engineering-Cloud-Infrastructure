@@ -64,37 +64,13 @@ models:
               values: [bad_date, placeholder_date, unknown_hospital, unknown_product, bad_quantity,
                        negative_quantity, implausible_quantity, duplicate_row]
 
-  - name: silver_fridge_readings
-    description: "Use case 3 - one row per fridge reading (S5), both sensor firmware versions"
-    tests:
-      - unique:
-          column_name: "device_id || '|' || reading_at"
-    columns:
-      - name: hospital_id
-        tests:
-          - not_null
-          - relationships: {to: ref('silver_hospitals'), field: hospital_id}
-      - name: temp_c
-        tests: [not_null]
-
-  - name: silver_cold_chain_status
-    description: "Use case 3 - per hospital and snapshot day: did every fridge stay between 2 and 8 °C over the last 7 days?"
-    tests:
-      - unique:
-          column_name: "snapshot_date || '|' || hospital_id"
-    columns:
-      - name: cold_chain_ok
-        tests: [not_null]
-      - name: cold_chain_issue
-        tests:
-          - accepted_values:
-              values: [no_sensor_data, temperature_excursion, sensor_silent]
-
   - name: silver_product_reference
-    description: "Each product linked to the national drug database (S3, CIS codes) and to the national shortage list (S4)"
+    description: "Each product linked to the national drug database (S3, CIS codes) by molecule and by name, and to the national shortage list (S4)"
     columns:
       - name: product_id
         tests: [unique, not_null]
+      - name: bdpm_medicines_found_only_by_molecule
+        description: "Medicines found through the composition file whose name does not contain the molecule (brand names such as Doliprane)"
       - name: is_national_shortage
         tests: [not_null]
 

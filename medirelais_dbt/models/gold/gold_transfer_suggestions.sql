@@ -1,7 +1,7 @@
 -- USE CASE 1 - the action: for each transferable batch, the hospital that can use the most
 -- of it before it expires, and how much of its value that saves.
 -- Receivers come from consumption, so a hospital that has run out still counts.
--- Cold-chain medicines only go to a hospital whose fridges stayed in range (S5).
+-- Cold-chain medicines never get here: gold_value_at_risk marks them not transferable.
 -- Assumption: every hospital uses its soonest-expiring stock first. So a candidate first uses
 -- its own stock that expires before (or with) the batch; what it can still use before the
 -- batch expires is daily use x days left, minus that stock. That is the usable quantity.
@@ -14,14 +14,9 @@ WITH at_risk AS (
     WHERE is_transferable
 ),
 usage AS (
-    SELECT u.snapshot_date, u.hospital_id, h.hospital_name, u.product_id, u.avg_daily_use,
-           COALESCE(cc.cold_chain_ok, FALSE) AS receiver_cold_chain_ok,
-           cc.cold_chain_issue               AS receiver_cold_chain_issue
+    SELECT u.snapshot_date, u.hospital_id, h.hospital_name, u.product_id, u.avg_daily_use
     FROM {{ ref('silver_daily_use') }} u
     JOIN {{ ref('silver_hospitals') }} h ON u.hospital_id = h.hospital_id
-    LEFT JOIN {{ ref('silver_cold_chain_status') }} cc
-      ON cc.snapshot_date = u.snapshot_date
-     AND cc.hospital_id   = u.hospital_id
     WHERE u.avg_daily_use > 0
 ),
 -- For each batch and each other hospital: its own stock of the product that expires
@@ -45,8 +40,6 @@ candidates AS (
         u.hospital_id,
         u.hospital_name,
         u.avg_daily_use,
-        u.receiver_cold_chain_ok,
-        u.receiver_cold_chain_issue,
         COALESCE(own.qty_ahead, 0)                                   AS own_stock_used_first,
         LEAST(r.qty_on_hand,
               GREATEST(0, FLOOR(u.avg_daily_use * r.days_to_expiry) - COALESCE(own.qty_ahead, 0))
@@ -73,29 +66,11 @@ best_receiver AS (
     JOIN candidates c
       ON c.snapshot_date = r.snapshot_date
      AND c.batch_id      = r.batch_id
-    -- a cold-chain medicine only goes to a hospital whose fridges stayed in range
-    WHERE (NOT r.is_cold_chain OR c.receiver_cold_chain_ok)
-      AND c.usable_qty > 0
+    WHERE c.usable_qty > 0
     QUALIFY ROW_NUMBER() OVER (
         PARTITION BY r.snapshot_date, r.batch_id
         ORDER BY c.usable_qty DESC, c.avg_daily_use DESC, c.hospital_id
     ) = 1
-),
--- Hospitals that would have used more of the batch but were passed over because their
--- fridges went out of range: shown so the pharmacist sees why
-skipped AS (
-    SELECT b.snapshot_date, b.batch_id,
-           LISTAGG(c.hospital_id || ' (' || c.receiver_cold_chain_issue || ')', ', ')
-               WITHIN GROUP (ORDER BY c.usable_qty DESC, c.hospital_id) AS receivers_skipped_cold_chain
-    FROM best_receiver b
-    JOIN candidates c
-      ON c.snapshot_date = b.snapshot_date
-     AND c.batch_id      = b.batch_id
-    WHERE b.is_cold_chain
-      AND NOT c.receiver_cold_chain_ok
-      AND (c.usable_qty > b.usable_qty
-           OR (c.usable_qty = b.usable_qty AND c.avg_daily_use > b.to_hospital_daily_use))
-    GROUP BY b.snapshot_date, b.batch_id
 ),
 -- What each receiver will have to get through: the incoming batches plus its own
 -- stock (minus any of its own batches that are being sent away)
@@ -143,8 +118,6 @@ SELECT
     q.qty_queued_up_to_this_batch,
     ROUND(q.qty_queued_up_to_this_batch / b.to_hospital_daily_use, 0) AS days_to_use_it_all,
     q.qty_queued_up_to_this_batch / b.to_hospital_daily_use <= b.days_to_expiry AS can_use_before_expiry,
-    b.is_cold_chain,
-    sk.receivers_skipped_cold_chain,
     b.is_national_shortage,
     b.shortage_status,
     -- handle first: medicines short in France, then the transfers that save the most
@@ -157,6 +130,3 @@ JOIN queued q
   ON q.snapshot_date = b.snapshot_date
  AND q.hospital_id   = b.to_hospital_id
  AND q.batch_id      = b.batch_id
-LEFT JOIN skipped sk
-  ON sk.snapshot_date = b.snapshot_date
- AND sk.batch_id      = b.batch_id

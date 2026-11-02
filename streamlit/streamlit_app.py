@@ -47,16 +47,16 @@ st.dataframe(q(f"""
     SELECT priority_rank AS PRIORITY, product_name AS PRODUCT, from_hospital AS FROM_HOSPITAL,
            to_hospital AS TO_HOSPITAL, qty_on_hand AS QTY, days_to_expiry AS DAYS_LEFT,
            ROUND(share_usable_before_expiry * 100) AS PCT_USABLE_IN_TIME,
-           saveable_value_eur::FLOAT AS SAVEABLE_EUR, is_national_shortage AS SHORTAGE_IN_FRANCE,
-           receivers_skipped_cold_chain AS SKIPPED_FRIDGE_PROBLEM
+           saveable_value_eur::FLOAT AS SAVEABLE_EUR, is_national_shortage AS SHORTAGE_IN_FRANCE
     FROM MEDIRELAIS.GOLD.GOLD_TRANSFER_SUGGESTIONS
     WHERE {LATEST}
     ORDER BY PRIORITY
 """), use_container_width=True)
 
-# --- Use case 1: cold-chain batches waiting for temperature proof ---
-st.subheader("Blocked: cold-chain batches without temperature proof")
-st.caption("Cold-chain products can only move with proof they stayed between 2 and 8 °C")
+# --- Use case 1: cold-chain batches, never transferred ---
+st.subheader("Not transferable: cold-chain batches")
+st.caption("Cold-chain products (insulin, vaccines...) stay at their hospital: we have no fridge data "
+           "to prove they stayed between 2 and 8 °C. Use them first or warn the prescribers.")
 st.dataframe(q(f"""
     SELECT hospital_name AS HOSPITAL, product_name AS PRODUCT, qty_on_hand AS QTY,
            value_at_risk_eur::FLOAT AS VALUE_EUR, days_to_expiry AS DAYS_LEFT
