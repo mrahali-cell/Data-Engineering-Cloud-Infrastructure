@@ -1,0 +1,65 @@
+# MédiRelais · Airflow on the laptop (orchestration of the whole pipeline)
+#
+#   docker compose up -d --build      start Airflow (first time: builds the image, about 3-5 minutes)
+#   open http://localhost:8080        the Airflow interface
+#   docker compose down               stop it (the run history is kept in the airflow-db volume)
+#
+# Prerequisites: Docker Desktop running, ingestion/.env and ingestion/keys/rsa_key.p8 in place,
+# and the hospitals' database started:  cd ../ingestion && docker compose up -d pharmacy-db
+# The passwords below are for local throw-away databases only.
+name: medirelais-airflow
+
+services:
+  # Airflow's own memory: DAG runs, task states, logs index. Not our business data.
+  airflow-db:
+    image: postgres:16.4
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes: ["airflow_db:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow -d airflow"]
+      interval: 5s
+      retries: 10
+
+  # Airflow itself: scheduler (the clock), DAG processor (reads dags/), web interface + API, all in one
+  airflow:
+    build:
+      context: ..
+      dockerfile: airflow/Dockerfile
+    image: medirelais-airflow:1.0.0
+    command: standalone
+    env_file: ../ingestion/.env          # Snowflake account, user, role... (never committed)
+    environment:
+      # Airflow settings
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor                 # runs independent tasks in parallel
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-db:5432/airflow
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__DEFAULT_TIMEZONE: Europe/Paris
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"     # nothing runs until you switch the DAG on
+      AIRFLOW__DAG_PROCESSOR__REFRESH_INTERVAL: "30"         # a new or changed DAG file shows up within 30 s
+      AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_ALL_ADMINS: "true"  # local only: no login page
+      # Our jobs (same settings as the ingestion container)
+      INGESTION_DIR: /opt/airflow/ingestion
+      LANDING_DIR: /opt/airflow/ingestion/landing
+      SNOWFLAKE_PRIVATE_KEY_PATH: /opt/airflow/ingestion/keys/rsa_key.p8
+      PGHOST: host.docker.internal                           # the pharmacy-db container, through the laptop
+      PGPORT: "5433"
+      PGDATABASE: pharmacy_source
+      PGUSER: source
+      PGPASSWORD: source_pw
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    volumes:
+      - ./dags:/opt/airflow/dags                             # the DAG file(s)
+      - ./tasks:/opt/airflow/tasks                           # the check scripts the DAG runs
+      - ../ingestion:/opt/airflow/ingestion                  # the ingestion jobs, keys, landing files
+      - airflow_logs:/opt/airflow/logs
+    ports: ["8080:8080"]
+    depends_on:
+      airflow-db:
+        condition: service_healthy
+
+volumes:
+  airflow_db:
+  airflow_logs:
