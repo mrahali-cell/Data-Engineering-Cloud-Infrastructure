@@ -19,7 +19,7 @@ simulate_day ──►├ ingest_s3_bdpm ─────────┼──►
 | `ingest_s1_stock` … `ingest_s4_shortages` | The 4 jobs of `ingestion/jobs/`, in parallel | The job ends with an error (source down, Snowflake refused…) | 2, 1 minute apart |
 | `check_ingestion` | Reads `BRONZE.LOAD_RUNS`: each source's latest run since the DAG started must be SUCCESS, and S2 must have loaded rows | A source did not load, or tonight's files did not arrive | 0 |
 | `dbt_silver` | `EXECUTE DBT PROJECT … build --select silver` in Snowflake: cleaning, quarantine, tests | A silver model or test fails | 1 |
-| `quality_gate` | Share of tonight's rows rejected by silver (duplicates excluded) | Over 15 % for tonight's consumption delivery or stock changes | 0 |
+| `quality_gate` | Share of tonight's rows (consumption delivery + stock changes) rejected by silver; duplicates and used-up batches are not errors | Over 15 % (a normal night: about 5 %; a corrupted night: about 45 %) | 0 |
 | `dbt_gold` | `EXECUTE DBT PROJECT … build --select gold`: value at risk, transfers, days of cover, business tests | A gold model or test fails | 1 |
 | `run_report` | Prints what the run did: loads, quarantine, transfer suggestions | — | 0 |
 
