@@ -1,4 +1,4 @@
-# MédiRelais ingestion image: the source simulator + the 6 ingestion jobs.
+# MédiRelais ingestion image: the source simulator + the 4 ingestion jobs.
 # One image, one command per job, so an orchestrator (Airflow) can run each job as its own task.
 #   docker build -t medirelais-ingest:1.0.0 .
 FROM python:3.12.7-slim
