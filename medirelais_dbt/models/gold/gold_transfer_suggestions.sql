@@ -1,6 +1,7 @@
 -- USE CASE 1 - the action: for each transferable batch, the hospital that
 -- uses the most of this product, and whether it can use it before it expires.
 -- Receivers come from consumption, so a hospital that has run out still counts.
+-- Cold-chain medicines only go to a hospital whose fridges stayed in range (S5).
 -- Ties are broken by hospital_id: the same data always gives the same answer.
 -- Several batches can go to the same receiver. Assumption: the receiver uses its
 -- soonest-expiring stock first (its own and the incoming batches), so a batch is
@@ -10,9 +11,14 @@ WITH at_risk AS (
     WHERE is_transferable
 ),
 usage AS (
-    SELECT u.snapshot_date, u.hospital_id, h.hospital_name, u.product_id, u.avg_daily_use
+    SELECT u.snapshot_date, u.hospital_id, h.hospital_name, u.product_id, u.avg_daily_use,
+           COALESCE(cc.cold_chain_ok, FALSE) AS receiver_cold_chain_ok,
+           cc.cold_chain_issue               AS receiver_cold_chain_issue
     FROM {{ ref('silver_daily_use') }} u
     JOIN {{ ref('silver_hospitals') }} h ON u.hospital_id = h.hospital_id
+    LEFT JOIN {{ ref('silver_cold_chain_status') }} cc
+      ON cc.snapshot_date = u.snapshot_date
+     AND cc.hospital_id   = u.hospital_id
     WHERE u.avg_daily_use > 0
 ),
 best_receiver AS (
@@ -26,10 +32,28 @@ best_receiver AS (
       ON r.snapshot_date = u.snapshot_date
      AND r.product_id    = u.product_id
      AND r.hospital_id  <> u.hospital_id
+     -- a cold-chain medicine only goes to a hospital whose fridges stayed in range
+     AND (NOT r.is_cold_chain OR u.receiver_cold_chain_ok)
     QUALIFY ROW_NUMBER() OVER (
         PARTITION BY r.snapshot_date, r.batch_id
         ORDER BY u.avg_daily_use DESC, u.hospital_id
     ) = 1
+),
+-- Hospitals that use the product more than the chosen receiver but were passed over
+-- because their fridges went out of range: shown so the pharmacist sees why
+skipped AS (
+    SELECT b.snapshot_date, b.batch_id,
+           LISTAGG(u.hospital_id || ' (' || u.receiver_cold_chain_issue || ')', ', ')
+               WITHIN GROUP (ORDER BY u.avg_daily_use DESC) AS receivers_skipped_cold_chain
+    FROM best_receiver b
+    JOIN usage u
+      ON u.snapshot_date = b.snapshot_date
+     AND u.product_id    = b.product_id
+     AND u.hospital_id  <> b.hospital_id
+     AND u.avg_daily_use > b.to_hospital_daily_use
+    WHERE b.is_cold_chain
+      AND NOT u.receiver_cold_chain_ok
+    GROUP BY b.snapshot_date, b.batch_id
 ),
 -- What each receiver will have to get through: the incoming batches plus its own
 -- stock (minus any of its own batches that are being sent away)
@@ -72,9 +96,19 @@ SELECT
     ROUND(b.to_hospital_daily_use, 1)                       AS to_hospital_daily_use,
     q.qty_queued_up_to_this_batch,
     ROUND(q.qty_queued_up_to_this_batch / b.to_hospital_daily_use, 0) AS days_to_use_it_all,
-    q.qty_queued_up_to_this_batch / b.to_hospital_daily_use <= b.days_to_expiry AS can_use_before_expiry
+    q.qty_queued_up_to_this_batch / b.to_hospital_daily_use <= b.days_to_expiry AS can_use_before_expiry,
+    b.is_cold_chain,
+    sk.receivers_skipped_cold_chain,
+    b.is_national_shortage,
+    b.shortage_status,
+    -- handle first: medicines short in France, then the most valuable batches
+    ROW_NUMBER() OVER (PARTITION BY b.snapshot_date
+                       ORDER BY b.is_national_shortage DESC, b.value_at_risk_eur DESC, b.batch_id) AS priority_rank
 FROM best_receiver b
 JOIN queued q
   ON q.snapshot_date = b.snapshot_date
  AND q.hospital_id   = b.to_hospital_id
  AND q.batch_id      = b.batch_id
+LEFT JOIN skipped sk
+  ON sk.snapshot_date = b.snapshot_date
+ AND sk.batch_id      = b.batch_id

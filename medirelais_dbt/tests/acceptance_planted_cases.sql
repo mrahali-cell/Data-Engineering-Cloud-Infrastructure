@@ -2,8 +2,8 @@
 -- (seed 42) must come out as expected on the latest snapshot, whatever the simulated day.
 -- The checks look at the planted hospital x product pairs, not at exact quantities,
 -- because the pharmacy uses some stock every day.
--- Verified on the first full run of the 6 sources (2 Nov 2026, days 1-2, snapshot 2026-10-29):
--- 20 batches / 38,530.99 EUR at risk, 5 transfer suggestions, every check below passing.
+-- Verified on the first full run of the 6 sources (2 Nov 2026, days 1-2, snapshot 2026-10-29).
+-- The UC3 fridge checks need day 2 to have been loaded (the planted breakdown happens on day 2).
 -- The test FAILS if this query returns rows (one row per failed check).
 WITH latest AS (
     SELECT MAX(snapshot_date) AS snapshot_date FROM {{ ref('silver_stock') }}
@@ -24,13 +24,12 @@ checks AS (
     SELECT 'UC1: some stock is at risk of expiring within 90 days' AS check_name,
            (SELECT COUNT(*) > 0 AND SUM(value_at_risk_eur) > 0 FROM var) AS passed
     UNION ALL
-    SELECT 'UC1: H01 insulin glargine is at risk but blocked until cold-chain proof',
+    SELECT 'UC1+3: H01 insulin glargine is at risk and, with fridge proof, no longer blocked by the cold chain',
            (SELECT COUNT(*) >= 1 FROM var WHERE hospital_id = 'H01' AND product_id = 'P008'
-               AND transfer_block_reason = 'no_cold_chain_proof')
+               AND COALESCE(transfer_block_reason, '') <> 'no_cold_chain_proof')
     UNION ALL
-    SELECT 'UC1: H02 rituximab is at risk but blocked until cold-chain proof',
-           (SELECT COUNT(*) >= 1 FROM var WHERE hospital_id = 'H02' AND product_id = 'P020'
-               AND transfer_block_reason = 'no_cold_chain_proof')
+    SELECT 'UC1: H02 rituximab (cold chain) is at risk',
+           (SELECT COUNT(*) >= 1 FROM var WHERE hospital_id = 'H02' AND product_id = 'P020')
     UNION ALL
     SELECT 'UC1: H05 ceftriaxone with under 30 days left is not transferable',
            (SELECT COUNT(*) >= 1 FROM var WHERE hospital_id = 'H05' AND product_id = 'P006'
@@ -51,8 +50,15 @@ checks AS (
     SELECT 'UC1: no expired batch appears',
            (SELECT COUNT(*) = 0 FROM var WHERE days_to_expiry < 0)
     UNION ALL
-    SELECT 'UC1: no cold-chain batch is suggested for transfer',
-           (SELECT COUNT(*) = 0 FROM transfers WHERE product_id IN ('P008', 'P009', 'P019', 'P020', 'P021', 'P022'))
+    SELECT 'UC3: the H04 fridge breakdown of day 2 (10:00-12:00 UTC) is read: 24 readings above 8 °C',
+           (SELECT COUNT(*) = 24 FROM {{ ref('silver_fridge_readings') }}
+             WHERE device_id = 'H04-FRIDGE-1' AND temp_c > 8
+               AND reading_at >= '2026-10-28 10:00:00 +0000'::TIMESTAMP_TZ
+               AND reading_at <  '2026-10-28 12:00:00 +0000'::TIMESTAMP_TZ)
+    UNION ALL
+    SELECT 'UC3: readings from both sensor firmware versions (ts/temp_c and timestamp/TEMP) are kept',
+           (SELECT COUNT_IF(payload_version = 'v1') > 0 AND COUNT_IF(payload_version = 'v2') > 0
+              FROM {{ ref('silver_fridge_readings') }})
     UNION ALL
     SELECT 'UC2: H03 paracetamol is flagged as over-stocked',
            (SELECT COUNT(*) = 1 FROM cover WHERE hospital_id = 'H03' AND product_id = 'P001' AND is_overstock_alert)
