@@ -42,8 +42,8 @@ models:
           - not_null
           - accepted_values:
               values: [bad_snapshot_date, missing_batch_id, unknown_hospital, unknown_product,
-                       bad_quantity, negative_quantity, zero_quantity, bad_expiry_date,
-                       bad_recall_flag, duplicate_row]
+                       bad_quantity, negative_quantity, zero_quantity, implausible_quantity,
+                       bad_expiry_date, placeholder_expiry_date, bad_recall_flag, duplicate_row]
 
   - name: silver_consumption
     description: "Daily consumption per hospital and product"
@@ -61,8 +61,8 @@ models:
         tests:
           - not_null
           - accepted_values:
-              values: [bad_date, unknown_hospital, unknown_product, bad_quantity,
-                       negative_quantity, duplicate_row]
+              values: [bad_date, placeholder_date, unknown_hospital, unknown_product, bad_quantity,
+                       negative_quantity, implausible_quantity, duplicate_row]
 
   - name: silver_daily_use
     description: "Average daily use over the 28 days before each snapshot, per hospital and product"

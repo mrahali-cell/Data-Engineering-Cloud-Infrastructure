@@ -1,11 +1,48 @@
 version: 2
 
+# Bronze = the 6 sources exactly as received, loaded by the ingestion jobs (ingestion/jobs/).
+# Every table carries _loaded_at and _batch_id; the run log is BRONZE.LOAD_RUNS.
 sources:
   - name: bronze
     database: MEDIRELAIS
     schema: BRONZE
+    loaded_at_field: _loaded_at
     tables:
-      - name: hospitals
-      - name: products
-      - name: stock
-      - name: consumption
+      # S1 - pharmacy stock database (Postgres), incremental pull + MERGE: one row per key, latest state
+      - name: hospitals_raw
+        description: "S1 - the 12 hospitals"
+      - name: products_raw
+        description: "S1 - the medicines the hospitals stock"
+      - name: stock_raw
+        description: "S1 - one row per batch on the shelf, latest state (legacy system: quantities and dates are free text)"
+        freshness:
+          warn_after: {count: 26, period: hour}
+          error_after: {count: 50, period: hour}
+
+      # S2 - daily consumption files (one CSV per hospital per day), batch COPY
+      - name: consumption_raw
+        description: "S2 - daily use per hospital and product; qty_used was renamed quantity_used from day 3 (schema drift)"
+        freshness:
+          warn_after: {count: 26, period: hour}
+          error_after: {count: 50, period: hour}
+
+      # S3/S4 - real public drug database (BDPM), positional text columns c1..c14
+      - name: bdpm_specialites_raw
+        description: "S3 - BDPM CIS_bdpm.txt (one row per medicine)"
+      - name: bdpm_presentations_raw
+        description: "S3 - BDPM CIS_CIP_bdpm.txt (one row per box / presentation)"
+      - name: shortages_raw
+        description: "S4 - BDPM shortages list, change detection by row hash"
+        loaded_at_field: last_seen_at
+
+      # S5 - fridge temperature sensors, raw JSON events
+      - name: fridge_readings_raw
+        description: "S5 - one JSON event per fridge every 5 minutes"
+
+      # S6 - Open-Meteo weather API, one raw JSON response per hospital per call
+      - name: weather_raw
+        description: "S6 - weather forecast per hospital"
+
+      - name: load_runs
+        description: "One row per ingestion job run (SUCCESS / FAILED), written by ingestion/common.py"
+        loaded_at_field: run_at

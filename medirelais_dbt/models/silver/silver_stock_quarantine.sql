@@ -1,9 +1,9 @@
--- Stock rows that failed a check, kept as received, with the reason.
+-- Stock rows that failed a check, kept exactly as received, with the reason.
 SELECT
     reject_reason,
-    raw_snapshot_date AS snapshot_date,
-    hospital_id,
-    product_id,
+    snapshot_date,
+    raw_hospital_id   AS hospital_id,
+    raw_product_id    AS product_id,
     batch_id,
     raw_qty_on_hand   AS qty_on_hand,
     raw_expiry_date   AS expiry_date,
