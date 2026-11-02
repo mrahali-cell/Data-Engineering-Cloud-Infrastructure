@@ -21,14 +21,14 @@ kpi = q(f"""
     WHERE {LATEST}
 """)
 saved = q(f"""
-    SELECT COALESCE(SUM(value_at_risk_eur), 0)::FLOAT AS SAVED
+    SELECT COALESCE(SUM(saveable_value_eur), 0)::FLOAT AS SAVED
     FROM MEDIRELAIS.GOLD.GOLD_TRANSFER_SUGGESTIONS
-    WHERE can_use_before_expiry AND {LATEST}
+    WHERE {LATEST}
 """)
 c1, c2, c3 = st.columns(3)
 c1.metric("Value expiring in 90 days", f"€{kpi.AT_RISK[0]:,.0f}")
 c2.metric("Batches at risk", int(kpi.BATCHES[0]))
-c3.metric("Saveable value (transfers usable in time)", f"€{saved.SAVED[0]:,.0f}")
+c3.metric("Saveable value (what receivers can use before expiry)", f"€{saved.SAVED[0]:,.0f}")
 
 # --- Use case 1: value at risk by hospital ---
 st.subheader("Value at risk by hospital")
@@ -44,12 +44,14 @@ st.bar_chart(risk, x="HOSPITAL", y="VALUE_AT_RISK_EUR")
 # --- Use case 1: what to send where ---
 st.subheader("Suggested transfers (for the pharmacist)")
 st.dataframe(q(f"""
-    SELECT product_name AS PRODUCT, from_hospital AS FROM_HOSPITAL, to_hospital AS TO_HOSPITAL,
-           qty_on_hand AS QTY, value_at_risk_eur::FLOAT AS VALUE_EUR,
-           days_to_expiry AS DAYS_LEFT, can_use_before_expiry AS CAN_USE_IN_TIME
+    SELECT priority_rank AS PRIORITY, product_name AS PRODUCT, from_hospital AS FROM_HOSPITAL,
+           to_hospital AS TO_HOSPITAL, qty_on_hand AS QTY, days_to_expiry AS DAYS_LEFT,
+           ROUND(share_usable_before_expiry * 100) AS PCT_USABLE_IN_TIME,
+           saveable_value_eur::FLOAT AS SAVEABLE_EUR, is_national_shortage AS SHORTAGE_IN_FRANCE,
+           receivers_skipped_cold_chain AS SKIPPED_FRIDGE_PROBLEM
     FROM MEDIRELAIS.GOLD.GOLD_TRANSFER_SUGGESTIONS
     WHERE {LATEST}
-    ORDER BY VALUE_EUR DESC
+    ORDER BY PRIORITY
 """), use_container_width=True)
 
 # --- Use case 1: cold-chain batches waiting for temperature proof ---
