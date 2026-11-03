@@ -82,7 +82,8 @@ k1, k2, k3, k4, k5 = st.columns(5)
 k1.metric("Expiring within 90 days", f"€{at_risk:,.0f}")
 k2.metric("Saveable by transfers", f"€{saveable:,.0f}")
 k3.metric("Recovery rate", f"{rate:.0%}", help="Saveable ÷ at risk. Network target: 40 %")
-k3.progress(min(rate / TARGET, 1.0), text=f"{min(rate / TARGET, 1.0):.0%} of the 40 % target")
+k3.progress(min(rate / TARGET, 1.0))
+k3.caption(f"{min(rate / TARGET, 1.0):.0%} of the 40 % target")
 k4.metric("Transfers to send", len(out_))
 k5.metric("Transfers to receive", len(in_))
 if shortage:
@@ -95,11 +96,11 @@ with a:
     st.caption("Transfers to send (prepare the batch for the courier)")
     st.dataframe(out_[["PRIORITY_RANK", "PRODUCT_NAME", "TO_HOSPITAL", "QTY_ON_HAND",
                        "DAYS_TO_EXPIRY", "SAVEABLE_EUR", "IS_NATIONAL_SHORTAGE"]],
-                 hide_index=True, use_container_width=True)
+                 use_container_width=True)
     st.caption("Transfers to receive (check you have room and will use it)")
     st.dataframe(in_[["PRIORITY_RANK", "PRODUCT_NAME", "FROM_HOSPITAL", "USABLE_QTY_BEFORE_EXPIRY",
                       "DAYS_TO_EXPIRY", "IS_NATIONAL_SHORTAGE"]],
-                 hide_index=True, use_container_width=True)
+                 use_container_width=True)
 with b:
     st.subheader("Expiry timeline")
     st.caption("€ at risk by days left, coloured by what can be done")
@@ -129,7 +130,7 @@ with c:
     st.caption("Use these locally or warn the prescribers")
     use_first = risk[risk.TRANSFER_BLOCK_REASON.notna()].sort_values("DAYS_TO_EXPIRY")
     st.dataframe(use_first[["PRODUCT_NAME", "QTY_ON_HAND", "DAYS_TO_EXPIRY", "VALUE_EUR",
-                            "TRANSFER_BLOCK_REASON"]], hide_index=True, use_container_width=True)
+                            "TRANSFER_BLOCK_REASON"]], use_container_width=True)
 with d:
     st.subheader("Buyer")
     cover = q(f"""
@@ -141,12 +142,9 @@ with d:
     over = cover[cover.IS_OVERSTOCK_ALERT].sort_values("OVERSTOCK_EUR", ascending=False)
     st.caption("Over-stock: stop ordering these")
     st.dataframe(over[["PRODUCT_NAME", "DAILY_USE", "DAYS_OF_COVER", "MIN_DAYS_TO_EXPIRY", "OVERSTOCK_EUR"]],
-                 hide_index=True, use_container_width=True,
-                 column_config={"OVERSTOCK_EUR": st.column_config.ProgressColumn(
-                     "Will expire unused (€)", format="€%.0f", min_value=0,
-                                          max_value=max(float(over.OVERSTOCK_EUR.fillna(0).max()) if not over.empty else 0.0, 1.0))})
+                 use_container_width=True)
     low = cover[cover.DAYS_OF_COVER < 7].sort_values("DAYS_OF_COVER")
     st.caption("Low cover: under 7 days left at the normal pace, order now")
     st.dataframe(low[["PRODUCT_NAME", "DAILY_USE", "DAYS_OF_COVER"]].style.apply(
                      lambda r: ["background-color: #fbebeb" if r.DAYS_OF_COVER < 3 else ""] * len(r), axis=1),
-                 hide_index=True, use_container_width=True)
+                 use_container_width=True)

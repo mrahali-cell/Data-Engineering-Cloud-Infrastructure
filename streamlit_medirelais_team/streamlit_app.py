@@ -114,7 +114,7 @@ with business:
             SELECT hospital_name AS HOSPITAL, product_name AS PRODUCT, qty_on_hand AS QTY,
                    days_to_expiry AS DAYS_LEFT, value_at_risk_eur::FLOAT AS EUR
             FROM {GOLD}.GOLD_VALUE_AT_RISK WHERE is_national_shortage AND {LATEST}
-            ORDER BY DAYS_LEFT"""), hide_index=True, use_container_width=True)
+            ORDER BY DAYS_LEFT"""), use_container_width=True)
 
 # =============================== PIPELINE ===============================
 with pipeline:
@@ -151,13 +151,13 @@ with pipeline:
             ROWS_IN=("ROWS_IN", "sum"), ROWS_LOADED=("ROWS_LOADED", "sum")).reset_index()
         daily["NOTHING_LOST"] = daily.ROWS_IN == daily.ROWS_LOADED
         st.dataframe(daily.sort_values(["RUN_DATE", "JOB"], ascending=[False, True]),
-                     hide_index=True, use_container_width=True)
+                     use_container_width=True)
         st.subheader("Hours since last load")
         fr = last[["JOB", "STATUS"]].assign(HOURS=hours.round(1).values)
         st.dataframe(fr.style.apply(lambda r: [
             "background-color: #e5f4e4" if r.HOURS < 26 else
             "background-color: #f9eeda" if r.HOURS < 50 else "background-color: #fbebeb"] * len(r), axis=1),
-            hide_index=True, use_container_width=True)
+            use_container_width=True)
     with right:
         st.subheader("Reject rate by night (consumption)")
         night = hist.groupby("DELIVERY_DATE").apply(
