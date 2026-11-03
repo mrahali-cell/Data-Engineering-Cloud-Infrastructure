@@ -96,6 +96,15 @@ saveable_value = SUM(usable_qty × unit_cost) of suggested transfers
 - **Assumption:** every hospital uses its soonest-expiring stock first. When several batches go to the same hospital, `can_use_before_expiry` checks whether it can use all of them, plus its own stock, in time.
 - **Value saved**, the base of the 10% success fee, counts the units that were actually transferred and used before expiry. It needs a register of real transfers, which is out of scope for this project. Saveable value is its forecast.
 
+**Metric 3 · Recovery rate:** the share of the value at risk that the suggested transfers can save.
+
+```
+recovery_rate = saveable_value / value_at_risk
+```
+
+- **Grain:** one number per snapshot day, for the whole network (dashboard key number).
+- It shows how much of the problem MédiRelais can actually solve; the README target is 40 %.
+
 **Acceptance test** (`tests/acceptance_planted_cases.sql`), on the generated dataset (seed 42, snapshot 28 Oct 2026), whose planted cases were checked by hand from the CSV files:
 - total value at risk is €146,658.16 over 20 batches, to the cent;
 - the H01 insulin and H02 rituximab batches are at risk but never transferred (cold chain);
@@ -121,6 +130,16 @@ days_of_cover = qty_on_hand / AVG(daily_consumption over the last 28 days)
 - **Window:** the 28 days before each snapshot date, so re-running an old day gives the same answer.
 - **Exclusions:** products with less than 8 weeks of history, and products with zero consumption.
 - **Alert:** some of the stock will expire before it is used. Batches are used soonest-expiring first, and a batch is flagged when everything ahead of it, plus the batch itself, takes longer to use than the batch has left.
+
+**Metric · Over-stock value:** the money that will expire unused if the buyer keeps the current stock.
+
+```
+overstock_value = SUM(units that will expire before use at the current pace × unit_cost)
+units_expiring  = MIN(qty_on_hand, MAX(0, stock queued up to this batch − daily use × days to expiry))
+```
+
+- **Grain:** one row per product × hospital × day (`gold_days_of_cover.overstock_value_eur`).
+- **Daily use** is the same 28-day average as above; the dashboard shows it next to days of cover.
 
 **Acceptance test** (same file as use case 1):
 - for 3 sample products, the computed cover equals a manual calculation (17, 45 and 41 days);
