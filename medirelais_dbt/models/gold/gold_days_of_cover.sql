@@ -15,6 +15,7 @@ WITH batches AS (
         s.product_name,
         s.qty_on_hand,
         s.days_to_expiry,
+        s.unit_cost_eur,
         u.avg_daily_use,
         SUM(s.qty_on_hand) OVER (
             PARTITION BY s.snapshot_date, s.hospital_id, s.product_id
@@ -42,6 +43,10 @@ SELECT
     MIN(days_to_expiry)                               AS min_days_to_expiry,
     -- Alert: some of this stock will expire before it is used
     MAX(CASE WHEN qty_queued_up_to_this_batch / avg_daily_use > days_to_expiry
-             THEN 1 ELSE 0 END) = 1                   AS is_overstock_alert
+             THEN 1 ELSE 0 END) = 1                   AS is_overstock_alert,
+    -- Over-stock value: units that will expire before use at the current pace x unit cost
+    ROUND(SUM(LEAST(qty_on_hand,
+                    GREATEST(0, qty_queued_up_to_this_batch - avg_daily_use * days_to_expiry))
+              * unit_cost_eur), 2)                    AS overstock_value_eur
 FROM batches
 GROUP BY 1, 2, 3, 4, 5

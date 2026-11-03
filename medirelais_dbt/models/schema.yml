@@ -112,6 +112,12 @@ models:
           - not_null
           - accepted_range:
               min_value: 0
+      - name: overstock_value_eur
+        description: "Units that will expire before use at the current pace x unit cost"
+        tests:
+          - not_null
+          - accepted_range:
+              min_value: 0
 
   - name: gold_transfer_suggestions
     description: "Use case 1 - where to send each transferable batch: the hospital that can use the most of it before it expires"

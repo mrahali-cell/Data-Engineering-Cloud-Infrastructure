@@ -28,10 +28,12 @@ saved = q(f"""
     FROM MEDIRELAIS.GOLD.GOLD_TRANSFER_SUGGESTIONS
     WHERE {LATEST}
 """)
-c1, c2, c3 = st.columns(3)
+c1, c2, c3, c4 = st.columns(4)
 c1.metric("Value expiring in 90 days", f"€{kpi.AT_RISK[0]:,.0f}")
 c2.metric("Batches at risk", int(kpi.BATCHES[0]))
 c3.metric("Saveable value (what receivers can use before expiry)", f"€{saved.SAVED[0]:,.0f}")
+c4.metric("Recovery rate (saveable ÷ at risk)",
+          f"{saved.SAVED[0] / kpi.AT_RISK[0]:.0%}" if kpi.AT_RISK[0] else "–")
 
 # --- Data quality of the latest night ---
 st.subheader("Data quality (latest night)")
@@ -85,8 +87,10 @@ st.subheader("Over-stock alerts (for the buyer)")
 st.caption("Some of this stock will expire before it is used: stop ordering these")
 st.dataframe(q(f"""
     SELECT hospital_name AS HOSPITAL, product_name AS PRODUCT,
-           days_of_cover::FLOAT AS DAYS_OF_STOCK, min_days_to_expiry AS DAYS_BEFORE_EXPIRY
+           avg_daily_use::FLOAT AS DAILY_USE,
+           days_of_cover::FLOAT AS DAYS_OF_STOCK, min_days_to_expiry AS DAYS_BEFORE_EXPIRY,
+           overstock_value_eur::FLOAT AS OVERSTOCK_VALUE_EUR
     FROM MEDIRELAIS.GOLD.GOLD_DAYS_OF_COVER
     WHERE is_overstock_alert AND {LATEST}
-    ORDER BY DAYS_OF_STOCK DESC
+    ORDER BY OVERSTOCK_VALUE_EUR DESC
 """), use_container_width=True)
