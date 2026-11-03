@@ -144,3 +144,13 @@ models:
       - name: priority_rank
         description: "1 = handle first: medicines in national shortage first, then the largest saveable value"
         tests: [not_null]
+
+  - name: gold_data_quality
+    description: "Latest night: rows received, rows rejected by silver, reject rate (dashboard quality tile)"
+    columns:
+      - name: reject_rate
+        tests:
+          - not_null
+          - accepted_range:
+              min_value: 0
+              max_value: 1

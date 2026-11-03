@@ -33,6 +33,18 @@ c1.metric("Value expiring in 90 days", f"€{kpi.AT_RISK[0]:,.0f}")
 c2.metric("Batches at risk", int(kpi.BATCHES[0]))
 c3.metric("Saveable value (what receivers can use before expiry)", f"€{saved.SAVED[0]:,.0f}")
 
+# --- Data quality of the latest night ---
+st.subheader("Data quality (latest night)")
+dq = q("SELECT * FROM MEDIRELAIS.GOLD.GOLD_DATA_QUALITY")
+q1, q2, q3 = st.columns(3)
+q1.metric("Delivery", str(dq.DELIVERY_DATE[0]))
+q2.metric("Rows received", int(dq.ROWS_RECEIVED[0]))
+q3.metric("Rejected to quarantine", f"{float(dq.REJECT_RATE[0]):.1%}")
+if dq.GOLD_BLOCKED[0]:
+    st.error("Over 15 %: gold was not refreshed. The figures below are from the last good day.")
+else:
+    st.success("Quality OK: the figures below are from tonight.")
+
 # --- Use case 1: value at risk by hospital ---
 st.subheader("Value at risk by hospital")
 risk = q(f"""
