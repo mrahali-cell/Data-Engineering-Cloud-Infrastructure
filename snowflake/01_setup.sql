@@ -1,5 +1,9 @@
 -- MédiRelais · Step 1: set up the Snowflake environment (run once, by an admin)
--- Safe to re-run: nothing here drops or empties a table that holds data.
+-- BOOTSTRAP ONLY. Terraform (terraform/) now owns the warehouse, the database, the
+-- BRONZE/SILVER/GOLD schemas and the MEDIRELAIS_PIPELINE role: change them there, not here.
+-- This file stays as the record of how a new account is first prepared (stage, file format,
+-- the first bronze tables, the pipeline grants, the GitHub integration).
+-- Do not re-run it on the live account: section 5 drops the daily task and the dbt project.
 -- Steps 2 and 3 then run as MEDIRELAIS_PIPELINE, never as ACCOUNTADMIN.
 
 -- 1. Warehouse, database, schemas, file format, stage

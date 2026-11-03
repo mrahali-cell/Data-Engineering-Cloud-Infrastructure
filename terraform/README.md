@@ -8,6 +8,7 @@
 | `roles.tf` | Who can read what: READER (the dashboard), FINANCE (with purchase prices), PHARMACIST_H01 and _H04 (their hospital only), all on GOLD only |
 | `governance.tf` | The access rules on GOLD: pharmacists see their own hospital only (row access policies, driven by the `GOVERNANCE.HOSPITAL_ACCESS` mapping), purchase prices are hidden from everyone but FINANCE and the pipeline (masking policy). dbt re-attaches them after each rebuild (`medirelais_dbt/dbt_project.yml`); the dashboard is created by READER, so it shows every hospital and no prices |
 | `archive.tf` | Where old raw data goes: S3 bucket, the access Snowflake uses to write to it, and the stage `MEDIRELAIS.BRONZE.ARCHIVE_STAGE` |
+| `costs.tf` | The `COST_CENTER` tag on the warehouse and the database, so the bill can be split by project (`snowflake/05_costs.sql`) |
 | `imports.tf` | Took over the objects first created by hand, without recreating them |
 
 Not managed here, on purpose: tables (dbt owns silver and gold, the ingestion jobs own bronze), and the dbt project,
@@ -45,6 +46,8 @@ After a change, `terraform plan` must say "No changes"; anything else means some
 - The `TERRAFORM` service user, its key pair, and `GRANT CREATE INTEGRATION ON ACCOUNT TO ROLE SYSADMIN` (needs ACCOUNTADMIN): `bootstrap.sql`.
   The private key stays in `terraform/keys/`, ignored by git.
 - The GitHub API integration (needs ACCOUNTADMIN): `snowflake/01_setup.sql`.
+- The resource monitor `MEDIRELAIS_MONITOR` that caps the warehouse's monthly credits (needs ACCOUNTADMIN):
+  `snowflake/05_costs.sql`, step 7.
 
 ## Archive
 

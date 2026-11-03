@@ -3,6 +3,9 @@ from snowflake.snowpark.context import get_active_session
 
 session = get_active_session()
 
+# Gold changes once a day (06:00), so each query result is reused for an hour instead of
+# waking the warehouse at every page view
+@st.cache_data(ttl=3600)
 def q(sql):
     return session.sql(sql).to_pandas()
 

@@ -13,8 +13,10 @@ resource "snowflake_warehouse" "medirelais" {
   min_cluster_count                   = 1
   max_cluster_count                   = 1
   scaling_policy                      = "STANDARD"
-  enable_query_acceleration           = true
+  enable_query_acceleration           = false # rents extra compute for big scans; our tables are small
   query_acceleration_max_scale_factor = 8
+  # Monthly credit cap; the monitor itself needs ACCOUNTADMIN (snowflake/05_costs.sql, step 7)
+  resource_monitor = "MEDIRELAIS_MONITOR"
 }
 
 resource "snowflake_database" "medirelais" {

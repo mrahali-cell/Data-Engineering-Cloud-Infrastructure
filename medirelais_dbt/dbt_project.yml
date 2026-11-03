@@ -9,6 +9,8 @@ macro-paths: ["macros"]
 
 models:
   medirelais_dbt:
+    # Every dbt query is tagged, so snowflake/05_costs.sql can show what the daily build costs
+    +query_tag: "medirelais:pipeline:dbt"
     silver:
       +schema: SILVER
       +materialized: table

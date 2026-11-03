@@ -199,6 +199,9 @@ hospital negotiated.
 [`snowflake/04_access_check.sql`](snowflake/04_access_check.sql) runs the same query under each role, and lists
 who read the gold tables in the last 7 days.
 
+**Administrators.** Account administration (`ACCOUNTADMIN`: users, roles, billing, account settings) is held by
+Soumaya Atoui and Hadiqa Javaid. Manel Rahali works as `SYSADMIN` (databases, schemas, warehouses).
+
 **Data stewards**, accountable for the definitions and the quality of each layer:
 
 | Layer | Steward |
