@@ -160,3 +160,23 @@ models:
           - accepted_range:
               min_value: 0
               max_value: 1
+
+  - name: gold_pipeline_loads
+    description: "One row per ingestion job run, from BRONZE.LOAD_RUNS (team dashboard, pipeline tab)"
+    columns:
+      - name: job
+        tests: [not_null]
+      - name: status
+        tests:
+          - accepted_values:
+              values: [SUCCESS, FAILED]
+
+  - name: gold_quality_history
+    description: "Consumption rows per nightly delivery and reject reason (team dashboard, pipeline tab)"
+    columns:
+      - name: delivery_date
+        tests: [not_null]
+      - name: rows_received
+        tests:
+          - accepted_range:
+              min_value: 1
