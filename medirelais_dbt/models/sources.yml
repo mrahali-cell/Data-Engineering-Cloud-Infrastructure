@@ -33,10 +33,15 @@ sources:
         description: "S3 - BDPM CIS_CIP_bdpm.txt (one row per box / presentation)"
       - name: bdpm_composition_raw
         description: "S3 - BDPM CIS_COMPO_bdpm.txt (one row per substance of a medicine): used to match by molecule"
+        freshness:
+          warn_after: {count: 8, period: day}
+          error_after: {count: 15, period: day}
       - name: shortages_raw
         description: "S4 - BDPM shortages list, change detection by row hash"
         loaded_at_field: last_seen_at
-
+        freshness:
+          warn_after: {count: 26, period: hour}
+          error_after: {count: 50, period: hour}
       - name: load_runs
         description: "One row per ingestion job run (SUCCESS / FAILED), written by ingestion/common.py"
         loaded_at_field: run_at
