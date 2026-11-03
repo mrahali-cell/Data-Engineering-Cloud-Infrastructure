@@ -16,10 +16,12 @@ MédiRelais runs a shared stock platform for a group of 12 public hospitals in �
 | Who pays | What they buy | Price (assumption) | Per year |
 | --- | --- | --- | --- |
 | Each member hospital (12) | Platform subscription: alerts, matching, dashboards | €1,500 / month | €216,000 |
-| Each member hospital | Success fee on medication saved from expiry | 10% of value saved | ≈ €58,000 |
-| **Total revenue** | | | **≈ €274,000** |
+| **Total revenue** | | | **€216,000** |
 
-The success fee aligns MédiRelais with the hospitals: it earns more only when less medication is thrown away.
+MédiRelais is paid a flat subscription only. It takes no percentage and no fee on the medication that moves between
+hospitals: in France a platform cannot charge a success fee or a commission on the redistribution of medication between
+hospitals. The savings are shown to the hospitals, not billed: about €576,000 a year saved (target below) for €216,000
+of subscriptions.
 
 ### Operations, size and stakeholders
 
@@ -94,7 +96,7 @@ saveable_value = SUM(usable_qty × unit_cost) of suggested transfers
 - **Receiver:** among the other hospitals that use the product, the one that can use the most of the batch before it expires; ties broken by daily use, then hospital ID. A hospital that has run out of the product still counts. A batch no hospital can use in time gets no suggestion. Cold-chain batches are never suggested.
 - **Priority:** medicines in national shortage first (S4), then the largest saveable value.
 - **Assumption:** every hospital uses its soonest-expiring stock first. When several batches go to the same hospital, `can_use_before_expiry` checks whether it can use all of them, plus its own stock, in time.
-- **Value saved**, the base of the 10% success fee, counts the units that were actually transferred and used before expiry. It needs a register of real transfers, which is out of scope for this project. Saveable value is its forecast.
+- **Value saved**, what shows each hospital the return on its subscription, counts the units that were actually transferred and used before expiry. It needs a register of real transfers, which is out of scope for this project. Saveable value is its forecast.
 
 **Acceptance test** (`tests/acceptance_planted_cases.sql`), on the generated dataset (seed 42, snapshot 28 Oct 2026), whose planted cases were checked by hand from the CSV files:
 - total value at risk is €146,658.16 over 20 batches, to the cent;
