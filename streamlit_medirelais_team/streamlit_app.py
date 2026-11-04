@@ -172,8 +172,10 @@ with pipeline:
         st.subheader("Hours since last load")
         fr = last[["JOB", "STATUS"]].assign(HOURS=hours.round(1).values)
         st.dataframe(fr.style.apply(lambda r: [
-            "background-color: #e5f4e4" if r.HOURS < 26 else
-            "background-color: #f9eeda" if r.HOURS < 50 else "background-color: #fbebeb"] * len(r), axis=1),
+            # black text: the cell colours are light, so the default text is unreadable in dark mode
+            "background-color: #e5f4e4; color: black" if r.HOURS < 26 else
+            "background-color: #f9eeda; color: black" if r.HOURS < 50 else
+            "background-color: #fbebeb; color: black"] * len(r), axis=1),
             use_container_width=True)
     with right:
         st.subheader("Reject rate by night (consumption)")
