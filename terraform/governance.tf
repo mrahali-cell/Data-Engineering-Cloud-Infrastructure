@@ -132,10 +132,16 @@ resource "snowflake_grant_privileges_to_account_role" "pipeline_apply_masking" {
   }
 }
 
-# Dashboard: a Streamlit app runs with its owner's rights, and Snowflake cannot transfer the
-# ownership of an app, so READER creates it (03_schedule.sql): the dashboard sees all hospitals
-# and no purchase prices. READER may create apps in GOLD and read the Git repo, nothing more.
+# Dashboards: a Streamlit app runs with its owner's rights, and Snowflake cannot transfer the
+# ownership of an app, so each app is created by the role whose view it must show:
+#   - READER creates the network dashboard (03_schedule.sql): every hospital, no purchase prices;
+#   - each pharmacist role creates its hospital's app (06_hospital_apps.sql): its own hospital only.
+# These owners may create apps in GOLD and read the Git repo, nothing more.
 # The pipeline inherits READER so that whoever runs 03_schedule.sql can switch to it.
+locals {
+  dashboard_owners = toset(concat(["MEDIRELAIS_READER"], keys(local.hospital_access)))
+}
+
 resource "snowflake_grant_account_role" "reader_to_pipeline" {
   provider         = snowflake.security
   role_name        = snowflake_account_role.reader["MEDIRELAIS_READER"].name
@@ -144,7 +150,8 @@ resource "snowflake_grant_account_role" "reader_to_pipeline" {
 
 resource "snowflake_grant_privileges_to_account_role" "reader_create_dashboard" {
   provider          = snowflake.security
-  account_role_name = snowflake_account_role.reader["MEDIRELAIS_READER"].name
+  for_each          = local.dashboard_owners
+  account_role_name = snowflake_account_role.reader[each.value].name
   privileges        = ["CREATE STREAMLIT"]
   on_schema {
     schema_name = snowflake_schema.layer["GOLD"].fully_qualified_name
@@ -153,7 +160,8 @@ resource "snowflake_grant_privileges_to_account_role" "reader_create_dashboard" 
 
 resource "snowflake_grant_privileges_to_account_role" "reader_public_schema" {
   provider          = snowflake.security
-  account_role_name = snowflake_account_role.reader["MEDIRELAIS_READER"].name
+  for_each          = local.dashboard_owners
+  account_role_name = snowflake_account_role.reader[each.value].name
   privileges        = ["USAGE"]
   on_schema {
     schema_name = "\"${snowflake_database.medirelais.name}\".\"PUBLIC\""
@@ -162,10 +170,27 @@ resource "snowflake_grant_privileges_to_account_role" "reader_public_schema" {
 
 resource "snowflake_grant_privileges_to_account_role" "reader_git_repo" {
   provider          = snowflake.security
-  account_role_name = snowflake_account_role.reader["MEDIRELAIS_READER"].name
+  for_each          = local.dashboard_owners
+  account_role_name = snowflake_account_role.reader[each.value].name
   privileges        = ["READ"]
   on_schema_object {
     object_type = "GIT REPOSITORY"
     object_name = "\"${snowflake_database.medirelais.name}\".\"PUBLIC\".\"MEDIRELAIS_REPO\""
   }
+}
+
+# The READER grants existed before the for_each: keep them in place instead of revoking them
+moved {
+  from = snowflake_grant_privileges_to_account_role.reader_create_dashboard
+  to   = snowflake_grant_privileges_to_account_role.reader_create_dashboard["MEDIRELAIS_READER"]
+}
+
+moved {
+  from = snowflake_grant_privileges_to_account_role.reader_public_schema
+  to   = snowflake_grant_privileges_to_account_role.reader_public_schema["MEDIRELAIS_READER"]
+}
+
+moved {
+  from = snowflake_grant_privileges_to_account_role.reader_git_repo
+  to   = snowflake_grant_privileges_to_account_role.reader_git_repo["MEDIRELAIS_READER"]
 }
