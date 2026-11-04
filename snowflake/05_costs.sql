@@ -119,3 +119,25 @@ CREATE RESOURCE MONITOR IF NOT EXISTS MEDIRELAIS_MONITOR
 ALTER WAREHOUSE MEDIRELAIS_WH SET RESOURCE_MONITOR = MEDIRELAIS_MONITOR;
 
 SHOW RESOURCE MONITORS LIKE 'MEDIRELAIS_MONITOR';
+
+-- 8. Control: a budget on everything tagged COST_CENTER = 'medirelais' (terraform/costs.tf):
+--    the warehouse, and the database's storage and serverless work. The resource monitor (7)
+--    caps one warehouse and stops it; the budget watches all our spend, stops nothing, and
+--    emails the cost owner when the month is projected to go over the limit.
+--    The account is shared with other projects, so the budget follows our tag, not the account.
+--    Run once as ACCOUNTADMIN. The address must be verified in the user's Snowsight profile.
+USE ROLE ACCOUNTADMIN;
+CREATE NOTIFICATION INTEGRATION IF NOT EXISTS MEDIRELAIS_BUDGET_EMAIL
+  TYPE = EMAIL ENABLED = TRUE ALLOWED_RECIPIENTS = ('<cost owner email>');
+CREATE SNOWFLAKE.CORE.BUDGET IF NOT EXISTS MEDIRELAIS.GOVERNANCE.MEDIRELAIS_BUDGET();
+CALL MEDIRELAIS.GOVERNANCE.MEDIRELAIS_BUDGET!SET_SPENDING_LIMIT(12);
+CALL MEDIRELAIS.GOVERNANCE.MEDIRELAIS_BUDGET!SET_RESOURCE_TAGS(
+  [[(SELECT SYSTEM$REFERENCE('TAG', 'MEDIRELAIS.GOVERNANCE.COST_CENTER', 'SESSION', 'APPLYBUDGET')), 'medirelais']],
+  'UNION');
+GRANT USAGE ON INTEGRATION MEDIRELAIS_BUDGET_EMAIL TO APPLICATION SNOWFLAKE;  -- the budget app sends the email
+CALL MEDIRELAIS.GOVERNANCE.MEDIRELAIS_BUDGET!SET_EMAIL_NOTIFICATIONS('MEDIRELAIS_BUDGET_EMAIL', '<cost owner email>');
+
+-- Check: limit, spend so far this month, and what the budget covers
+CALL MEDIRELAIS.GOVERNANCE.MEDIRELAIS_BUDGET!GET_SPENDING_LIMIT();
+CALL MEDIRELAIS.GOVERNANCE.MEDIRELAIS_BUDGET!GET_SPENDING_HISTORY();
+CALL MEDIRELAIS.GOVERNANCE.MEDIRELAIS_BUDGET!GET_LINKED_RESOURCES();
