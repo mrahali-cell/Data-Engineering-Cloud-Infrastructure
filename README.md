@@ -350,11 +350,3 @@ SELECT * FROM MEDIRELAIS.GOLD.GOLD_DAYS_OF_COVER WHERE is_overstock_alert;
 4. Run `snowflake/03_schedule.sql`. It deploys the dbt project from the `main` branch of this repo and schedules `dbt build` every day at 06:00. Re-run it after each merge to deploy the new code.
 
 Steps 3 and 4 run as `MEDIRELAIS_PIPELINE`, never as `ACCOUNTADMIN`.
-
-## Team
-
-| Member | Part |
-| --- | --- |
-| Soumaya Atoui | Snowflake administration, Terraform, governance and costs |
-| Manel Rahali | Sources, ingestion, Airflow, incident 3 |
-| Hadiqa Javaid | Silver and gold, data-quality tests, incidents 1 and 2, dashboards |
