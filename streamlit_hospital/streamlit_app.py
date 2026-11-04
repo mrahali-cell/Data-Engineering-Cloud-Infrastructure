@@ -15,6 +15,9 @@ GOLD = "MEDIRELAIS.GOLD"
 TARGET = 0.40            # README: share of the value at risk MédiRelais aims to save
 
 
+# Gold changes once a day (06:00), so each query result is reused for an hour instead of
+# waking the warehouse at every page view. Each hospital is its own app, so nothing is shared.
+@st.cache_data(ttl=3600)
 def q(sql):
     return session.sql(sql).to_pandas()
 

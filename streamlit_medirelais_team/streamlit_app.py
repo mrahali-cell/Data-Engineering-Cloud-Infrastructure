@@ -15,6 +15,9 @@ TARGET = 0.40          # README: share of the value at risk MédiRelais aims to 
 MAX_REJECT = 0.15      # quality gate threshold (airflow/tasks/quality_gate.py)
 
 
+# Gold changes once a day (06:00), so each query result is reused for an hour instead of
+# waking the warehouse at every page view
+@st.cache_data(ttl=3600)
 def q(sql):
     df = session.sql(sql).to_pandas()
     df.columns = [c.upper() for c in df.columns]
