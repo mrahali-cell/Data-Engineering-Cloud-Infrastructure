@@ -250,10 +250,19 @@ who read the gold tables in the last 7 days.
 A Streamlit app in Snowflake runs with its **owner's** rights, so the owner role decides what it shows; the code never
 filters hospitals itself.
 
-| Dashboard | Code | Owner role | Who uses it | What it shows |
-| --- | --- | --- | --- | --- |
-| Hospital (one app per hospital) | `streamlit_hospital/`, deployed by `snowflake/06_hospital_apps.sql` | `MEDIRELAIS_PHARMACIST_Hxx` | The hospital pharmacist and buyer | Its own hospital: value at risk, saveable value, recovery rate, transfers to send and receive, expiry timeline, batches to use first, over-stock and low cover |
-| Team (`MEDIRELAIS_DASHBOARD`) | `streamlit_medirelais_team/`, deployed by `snowflake/03_schedule.sql` | `MEDIRELAIS_READER` | The MédiRelais team | **Business**: network KPIs, target vs saveable (€ and units), hospital ranking, transfer flows, trend, over-stock, shortages. **Pipeline**: loads per source and day, freshness, reject rate and gate result per night, rejects by reason |
+| Dashboard | Who uses it | Owner role | Code · deployed by |
+| --- | --- | --- | --- |
+| Hospital (one app per hospital) | Hospital pharmacist and buyer | `MEDIRELAIS_PHARMACIST_Hxx` | `streamlit_hospital/` · `snowflake/06_hospital_apps.sql` |
+| Team (`MEDIRELAIS_DASHBOARD`) | MédiRelais team | `MEDIRELAIS_READER` | `streamlit_medirelais_team/` · `snowflake/03_schedule.sql` |
+
+**What each dashboard shows**
+
+- **Hospital:** its own hospital only: value at risk, saveable value, recovery rate, transfers to send and to receive,
+  expiry timeline, batches to use first, over-stock and low cover.
+- **Team · Business tab:** network KPIs, target vs saveable (€ and units), hospital ranking, transfer flows, trend by
+  day, over-stock by hospital, shortage medicines at risk.
+- **Team · Pipeline tab:** loads per source and day, freshness per source, reject rate and gate result per night,
+  rejects by reason.
 
 **Administrators.** Account administration (`ACCOUNTADMIN`: users, roles, billing, account settings) is held by
 Soumaya Atoui and Hadiqa Javaid. Manel Rahali works as `SYSADMIN` (databases, schemas, warehouses).
