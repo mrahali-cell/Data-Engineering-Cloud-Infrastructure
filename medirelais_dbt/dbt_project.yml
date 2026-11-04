@@ -11,6 +11,9 @@ models:
   medirelais_dbt:
     # Every dbt query is tagged, so snowflake/05_costs.sql can show what the daily build costs
     +query_tag: "medirelais:pipeline:dbt"
+    # Every table gets its classification tags back after each build (macros/governance_tags.sql)
+    +post-hook:
+      - "{{ governance_tags() }}"
     silver:
       +schema: SILVER
       +materialized: table
