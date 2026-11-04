@@ -25,13 +25,13 @@ def q(sql):
 
 
 def bullet(value, target, title, fmt):
-    """Bar = value, black tick = target."""
+    """Bar = value, orange tick = target (orange reads on light and dark backgrounds)."""
     df = pd.DataFrame({"what": [title], "value": [value], "target": [target]})
     bar = alt.Chart(df).mark_bar(size=22, color="#2e7d32").encode(
         x=alt.X("value:Q", title=None, axis=alt.Axis(format=fmt),
                 scale=alt.Scale(domain=[0, max(value, target) * 1.15 or 1])),
         y=alt.Y("what:N", title=None))
-    tick = alt.Chart(df).mark_tick(color="black", thickness=3, size=34).encode(x="target:Q", y="what:N")
+    tick = alt.Chart(df).mark_tick(color="#e65100", thickness=3, size=34).encode(x="target:Q", y="what:N")
     return (bar + tick).properties(height=70)
 
 
@@ -59,7 +59,7 @@ with business:
     c3.metric("Recovery rate", f"{rate:.0%}", f"{rate - TARGET:+.0%} vs 40 % target")
 
     st.subheader("Target vs saveable")
-    st.caption("Bar = saveable by the suggested transfers · black tick = target (40 % of what is at risk). "
+    st.caption("Bar = saveable by the suggested transfers · orange tick = target (40 % of what is at risk). "
                "Actually saved needs a register of real transfers (out of scope, README).")
     b1, b2 = st.columns(2)
     b1.altair_chart(bullet(k.SAVE_EUR, TARGET * k.AT_RISK_EUR, "€", ",.0f"), use_container_width=True)
@@ -87,7 +87,7 @@ with business:
                 color=alt.Color("EUR:Q", title="€", scale=alt.Scale(scheme="greens")),
                 tooltip=["FROM_H", "TO_H", alt.Tooltip("EUR:Q", format=",.0f")]), use_container_width=True)
 
-    left, right = st.columns(2)
+    left, right = st.columns([2, 3])          # narrower charts, wider table on the right
     with left:
         st.subheader("Trend by snapshot day")
         t = q(f"""
@@ -98,13 +98,27 @@ with business:
                        FROM {GOLD}.GOLD_TRANSFER_SUGGESTIONS GROUP BY 1) s USING (snapshot_date)
             GROUP BY 1 ORDER BY 1""")
         t["RECOVERY"] = t.SAVEABLE / t.AT_RISK
-        long = t.melt("DAY", ["AT_RISK", "SAVEABLE"], var_name="WHAT", value_name="EUR")
-        st.altair_chart(alt.Chart(long).mark_line(point=True).encode(
-            x=alt.X("DAY:T", title=None), y=alt.Y("EUR:Q", title="€"), color=alt.Color("WHAT:N", title=None)),
+        t["DAY_LABEL"] = pd.to_datetime(t.DAY).dt.strftime("%d %b")
+        # Stacked bar: the whole bar = value at risk, split into the part transfers can save and the rest
+        t["NOT_SAVEABLE"] = (t.AT_RISK - t.SAVEABLE).clip(lower=0)
+        long = t.melt(["DAY_LABEL"], ["SAVEABLE", "NOT_SAVEABLE"], var_name="WHAT", value_name="EUR")
+        long["WHAT"] = long.WHAT.map({"SAVEABLE": "Saveable", "NOT_SAVEABLE": "Not saveable"})
+        st.altair_chart(alt.Chart(long).mark_bar().encode(
+            x=alt.X("DAY_LABEL:O", title=None, sort=list(t.DAY_LABEL)),
+            y=alt.Y("EUR:Q", title="€ at risk", stack="zero"),
+            color=alt.Color("WHAT:N", title=None, sort=["Saveable", "Not saveable"],
+                            scale=alt.Scale(domain=["Saveable", "Not saveable"], range=["#2e7d32", "#9e9e9e"]),
+                            legend=alt.Legend(orient="bottom")),
+            order=alt.Order("WHAT:N", sort="descending"),
+            tooltip=["DAY_LABEL", "WHAT", alt.Tooltip("EUR:Q", format=",.0f")]),
             use_container_width=True)
-        st.altair_chart(alt.Chart(t).mark_line(point=True, color="#2e7d32").encode(
-            x=alt.X("DAY:T", title=None), y=alt.Y("RECOVERY:Q", title="Recovery", axis=alt.Axis(format="%")))
-            .properties(height=120), use_container_width=True)
+        st.caption("Recovery rate by day · dashed line = 40 % target")
+        bars = alt.Chart(t).mark_bar(color="#2e7d32").encode(
+            x=alt.X("DAY_LABEL:O", title=None, sort=list(t.DAY_LABEL)),
+            y=alt.Y("RECOVERY:Q", title="Recovery", axis=alt.Axis(format="%")),
+            tooltip=["DAY_LABEL", alt.Tooltip("RECOVERY:Q", format=".0%")])
+        goal = alt.Chart(pd.DataFrame({"y": [TARGET]})).mark_rule(strokeDash=[6, 4], color="#e65100").encode(y="y:Q")
+        st.altair_chart((bars + goal).properties(height=160), use_container_width=True)
     with right:
         st.subheader("Over-stock € by hospital")
         o = q(f"""SELECT hospital_name AS HOSPITAL, SUM(overstock_value_eur)::FLOAT AS EUR
