@@ -51,7 +51,7 @@ of subscriptions.
 
 - Only batches with **30 days or more** left before expiry can be transferred.
 - Minimum transfer value is **€200**, so the courier trip is worth it.
-- Cold-chain products (insulin, vaccines...) would need proof they stayed between **2 °C and 8 °C** the whole time. We have no fridge data in this project, so they are **never** transferred and are shown as "no cold-chain proof".
+- Cold-chain products (insulin, vaccines...) would need proof they stayed between **2 °C and 8 °C** the whole time. We have no fridge data in this project, so they are **never** transferred and are shown as "no cold-chain proof" (hospital dashboard: "Use first").
 - Narcotics and recalled batches are **never** transferred.
 - Transfers stay **inside the hospital group**, under a pharmacist's responsibility.
 - **No patient data** is used: only stock, orders and consumption.
@@ -152,7 +152,10 @@ units_expiring  = MIN(qty_on_hand, MAX(0, stock queued up to this batch − dail
 
 ## 3. Architecture
 
-*Diagram coming next: 4 sources → ingestion (Docker) → bronze / silver / gold (dbt in Snowflake) → dashboard (Streamlit).*
+![MédiRelais architecture: 4 sources, ingestion in Docker, bronze / silver / gold in Snowflake, Airflow, dashboards, governance, archive, Terraform](docs/medirelais_pipeline.png)
+
+Every morning at 06:00 Airflow runs the 4 ingestion jobs (Docker), dbt cleans bronze into silver, the quality gate checks
+the night, dbt builds gold, and the dashboards read gold. Terraform creates the platform and the access rules.
 
 ### Sources and ingestion
 
@@ -181,11 +184,14 @@ README.md            company, use cases, architecture, how to run, team
 airflow/             orchestration: the daily DAG, its check scripts, docker-compose
 ingestion/           4 sources -> bronze: source simulator, one job per source, Dockerfile, docker-compose
 medirelais_dbt/      dbt project: silver (cleaning, quarantine) and gold (metrics), tests
-snowflake/           setup, scheduling and access-check scripts
-streamlit/           dashboard
+snowflake/           setup (01), CSV load (02), deploy + schedule (03), access check (04), costs (05),
+                     hospital dashboards (06)
+streamlit_medirelais_team/   team dashboard: Business and Pipeline tabs, all hospitals (owned by READER)
+streamlit_hospital/          hospital dashboard: one app per pharmacist role, its own hospital only
 terraform/           infrastructure as code: Snowflake platform, access rules, AWS archive
+docs/                architecture diagram, incident screenshots, slides material
 data/, generate_data.py, snowflake/02_load_bronze.sql
-                     first CSV version; to retire once silver reads the new bronze tables
+                     first CSV version (legacy: the pipeline now reads the bronze tables of ingestion/)
 ```
 
 ### About the data
@@ -202,6 +208,25 @@ The business figures in section 1 are about the real network. The numbers on the
 
 Bronze keeps every value as text, exactly as received, with `_source`, `_loaded_at` and `_batch_id`. Silver types the values. A row that fails a check is not dropped silently: it goes to `silver_stock_quarantine` or `silver_consumption_quarantine` with a `reject_reason`. Gold reads from silver only.
 
+### Data quality
+
+Three lines of defence: dbt tests on every build, a quality gate between silver and gold, and a quality tile on the
+dashboard. A failed test or a closed gate stops gold, so the dashboards keep the last good day.
+
+| Kind | Where | What it checks |
+| --- | --- | --- |
+| Keys | `medirelais_dbt/models/schema.yml` | `unique` and `not_null` on every grain; `relationships`: every transfer goes to a hospital of the group |
+| Allowed values | `schema.yml` | reject reasons, transfer block reasons, load statuses |
+| Ranges | `tests/generic/accepted_range.sql` (no package needed) | value at risk only 0–90 days to expiry; days of cover ≥ 0; over-stock € ≥ 0; reject rate 0–1 |
+| Business rules | `tests/transfers_respect_rules.sql`, `tests/transfer_priority_shortage_first.sql`, `tests/cover_needs_8_weeks_history.sql` | 30 days, €200, no narcotic / recalled / expired / cold-chain batch; shortage medicines ranked first; cover needs 8 weeks of history |
+| Acceptance | `tests/acceptance_planted_cases.sql` | the planted cases of the test data come out as expected |
+| Completeness | `tests/network_has_12_hospitals.sql`, `tests/consumption_from_all_hospitals.sql` (warn) | 12 hospitals; every hospital sent its consumption last night |
+| Quarantine | `tests/quarantine_below_15_percent.sql` (warn) + Airflow `quality_gate` (stops gold) | over 15 % of the night's rows rejected = the day is broken |
+| Freshness | `models/sources.yml` (`dbt source freshness`) | stock, consumption and shortages loaded within 26 h (error 50 h); BDPM within 8 days |
+
+`gold_data_quality` (built with silver, before the gate) feeds the quality tile: rows received, rows rejected, reject
+rate, and whether gold was blocked. `gold_pipeline_loads` and `gold_quality_history` feed the Pipeline tab.
+
 ### Data governance
 
 **What data the platform holds.** No patient data and no personal data: only stock, consumption per hospital
@@ -212,13 +237,32 @@ hospital negotiated.
 
 | Role | Who | Sees |
 | --- | --- | --- |
-| `MEDIRELAIS_PHARMACIST_Hxx` | A hospital pharmacist | Its own hospital's stock at risk and cover, and the transfers it sends or receives |
-| `MEDIRELAIS_READER` | The dashboard, the logistics coordinator | Every hospital, no purchase prices, GOLD only |
+| `MEDIRELAIS_PHARMACIST_Hxx` | A hospital pharmacist; owns its hospital dashboard | Its own hospital's stock at risk and cover, and the transfers it sends or receives |
+| `MEDIRELAIS_READER` | The team dashboard, the logistics coordinator | Every hospital, no purchase prices, GOLD only |
 | `MEDIRELAIS_FINANCE` | Finance | Every hospital, with purchase prices |
 | `MEDIRELAIS_PIPELINE` | Airflow and dbt | Everything; the only role that writes |
 
 [`snowflake/04_access_check.sql`](snowflake/04_access_check.sql) runs the same query under each role, and lists
 who read the gold tables in the last 7 days.
+
+### Dashboards
+
+A Streamlit app in Snowflake runs with its **owner's** rights, so the owner role decides what it shows; the code never
+filters hospitals itself.
+
+| Dashboard | Who uses it | Owner role | Code · deployed by |
+| --- | --- | --- | --- |
+| Hospital (one app per hospital) | Hospital pharmacist and buyer | `MEDIRELAIS_PHARMACIST_Hxx` | `streamlit_hospital/` · `snowflake/06_hospital_apps.sql` |
+| Team (`MEDIRELAIS_DASHBOARD`) | MédiRelais team | `MEDIRELAIS_READER` | `streamlit_medirelais_team/` · `snowflake/03_schedule.sql` |
+
+**What each dashboard shows**
+
+- **Hospital:** its own hospital only: value at risk, saveable value, recovery rate, transfers to send and to receive,
+  expiry timeline, batches to use first, over-stock and low cover.
+- **Team · Business tab:** network KPIs, target vs saveable (€ and units), hospital ranking, transfer flows, trend by
+  day, over-stock by hospital, shortage medicines at risk.
+- **Team · Pipeline tab:** loads per source and day, freshness per source, reject rate and gate result per night,
+  rejects by reason.
 
 **Administrators.** Account administration (`ACCOUNTADMIN`: users, roles, billing, account settings) is held by
 Soumaya Atoui and Hadiqa Javaid. Manel Rahali works as `SYSADMIN` (databases, schemas, warehouses).
@@ -271,14 +315,17 @@ GitHub (code)  ->  your laptop: Docker runs the job  ->  Snowflake BRONZE (data)
 4. Every row gets `_source_file` (or `_source`), `_loaded_at` and `_batch_id`, and the job writes one line to
    `MEDIRELAIS.BRONZE.LOAD_RUNS`: status, rows read, rows loaded. Rows read = rows loaded means nothing was lost.
 5. The jobs only fill **bronze**. Silver and gold are built by dbt **inside Snowflake**: every day at 06:00 by the task
-   `DAILY_PIPELINE`, or at once with `run_all.py --dbt`.
+   `DAILY_PIPELINE`, or at once with `run_all.py --dbt`. Once Airflow runs the pipeline, that task stays suspended
+   so there is only one scheduler (see below).
 
 **Orchestration (Airflow).** Every morning at 06:00, the DAG `medirelais_daily` runs the 4 ingestion jobs in parallel,
 checks them, builds silver, runs a quality gate, then builds gold; a failed step is retried, then stops everything after
 it. Setup, tasks and incident demos: [`airflow/README.md`](airflow/README.md).
 
-**Deploying new dbt code** (after a merge that changes `medirelais_dbt/`): run `snowflake/03_schedule.sql` as
-`MEDIRELAIS_PIPELINE`. It pulls `main` from GitHub, redeploys the dbt project and runs it. If the merge also adds a
+**Deploying new code** (after a merge into `main`): run **steps 1–3** of `snowflake/03_schedule.sql` as
+`MEDIRELAIS_PIPELINE`: it pulls `main` from GitHub, redeploys the dbt project and the team dashboard. Skip steps 4–5
+while Airflow is the scheduler: they restart the Snowflake task `DAILY_PIPELINE`. Then run
+`snowflake/06_hospital_apps.sql` to redeploy the hospital dashboards, and trigger the DAG once. If the merge also adds a
 bronze table, run the ingestion steps above first, or dbt fails because the table does not exist yet.
 
 **Looking at the data in Snowflake**
@@ -295,7 +342,7 @@ SELECT * FROM MEDIRELAIS.GOLD.GOLD_TRANSFER_SUGGESTIONS ORDER BY snapshot_date D
 SELECT * FROM MEDIRELAIS.GOLD.GOLD_DAYS_OF_COVER WHERE is_overstock_alert;
 ```
 
-**First CSV version** (kept until silver is moved to the new bronze tables):
+**First CSV version** (legacy, kept for reference: the pipeline now reads the bronze tables filled by `ingestion/`):
 
 1. `python generate_data.py` writes the CSV files to `data/`.
 2. An admin runs `snowflake/01_setup.sql` once. It creates the warehouse, the database, the bronze tables, the `MEDIRELAIS_PIPELINE` role and the link to this GitHub repo.
@@ -303,9 +350,3 @@ SELECT * FROM MEDIRELAIS.GOLD.GOLD_DAYS_OF_COVER WHERE is_overstock_alert;
 4. Run `snowflake/03_schedule.sql`. It deploys the dbt project from the `main` branch of this repo and schedules `dbt build` every day at 06:00. Re-run it after each merge to deploy the new code.
 
 Steps 3 and 4 run as `MEDIRELAIS_PIPELINE`, never as `ACCOUNTADMIN`.
-
-## Team
-
-Atoui Soumaya 
-Rahali Manel
-Javaid Hadiqa 
