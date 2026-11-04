@@ -6,7 +6,7 @@
 | `providers.tf` | Snowflake as SYSADMIN for objects and SECURITYADMIN for roles and grants (never ACCOUNTADMIN); AWS in eu-north-1 |
 | `platform.tf` | Warehouse `MEDIRELAIS_WH`, database `MEDIRELAIS`, schemas BRONZE/SILVER/GOLD (protected against deletion), the pipeline role |
 | `roles.tf` | Who can read what: READER (the dashboard), FINANCE (with purchase prices), PHARMACIST_H01 and _H04 (their hospital only), all on GOLD only |
-| `governance.tf` | The access rules on GOLD: pharmacists see their own hospital only (row access policies, driven by the `GOVERNANCE.HOSPITAL_ACCESS` mapping), purchase prices are hidden from everyone but FINANCE and the pipeline (masking policy). dbt re-attaches them after each rebuild (`medirelais_dbt/dbt_project.yml`); the dashboard is created by READER, so it shows every hospital and no prices |
+| `governance.tf` | The access rules on GOLD: pharmacists see their own hospital only (row access policies, driven by the `GOVERNANCE.HOSPITAL_ACCESS` mapping), purchase prices are hidden from everyone but FINANCE and the pipeline (masking policy). dbt re-attaches them after each rebuild (`medirelais_dbt/dbt_project.yml`); the team dashboard is created by READER, so it shows every hospital and no prices; each hospital dashboard is created by its pharmacist role, so it shows that hospital only |
 | `archive.tf` | Where old raw data goes: S3 bucket, the access Snowflake uses to write to it, and the stage `MEDIRELAIS.BRONZE.ARCHIVE_STAGE` |
 | `costs.tf` | The `COST_CENTER` tag on the warehouse and the database, so the bill can be split by project (`snowflake/05_costs.sql`) |
 | `imports.tf` | Took over the objects first created by hand, without recreating them |

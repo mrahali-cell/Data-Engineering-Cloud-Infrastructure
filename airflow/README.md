@@ -61,8 +61,8 @@ Once Airflow runs the pipeline, suspend the Snowflake task so there is only one 
 
 | Incident | Result | Proof |
 | --- | --- | --- |
-| 1 · Corrupted day | `quality_gate` red (≈45 %), gold not refreshed, dashboard kept day 3 | docs\Incident 1\failed_dag.png|
-| 2 · Files loaded twice | All green. Bronze: day 1–2 files ×2. Silver: 0 duplicates | docs\Incident 2\Incident_2_check_2026-11-02-2235_bronze.csv, docs\Incident 2\silver_after_incident.png|
+| 1 · Corrupted day | `quality_gate` red (≈45 %), gold not refreshed, dashboard kept day 3 | [failed DAG](../docs/Incident%201/failed_dag.png), [quality gate log](../docs/Incident%201/quality_gate_failed.png), [dashboard after](../docs/Incident%201/dashbaord_after.png) |
+| 2 · Files loaded twice | All green. Bronze: day 1–2 files ×2. Silver: 0 duplicates | [bronze counts](../docs/Incident%202/Incident_2_check_2026-11-02-2235_bronze.csv), [silver after](../docs/Incident%202/silver_after_incident.png), [--force output](../docs/Incident%202/output_force_ingest.txt) |
 
 ## Start the simulation again from a clean state
 
