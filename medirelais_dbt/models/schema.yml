@@ -94,7 +94,13 @@ models:
         tests:
           - accepted_values:
               values: [under_30_days, under_200_eur, no_cold_chain_proof]
-
+      - name: days_to_expiry
+        description: "README: expires within 90 days, already expired excluded"
+        tests:
+          - accepted_range:
+              min_value: 0
+              max_value: 90
+              
   - name: gold_days_of_cover
     description: "Use case 2 - days of stock left at the normal consumption pace"
     tests:
@@ -102,7 +108,16 @@ models:
           column_name: "snapshot_date || '|' || hospital_id || '|' || product_id"
     columns:
       - name: days_of_cover
-        tests: [not_null]
+        tests:
+          - not_null
+          - accepted_range:
+              min_value: 0
+      - name: overstock_value_eur
+        description: "Units that will expire before use at the current pace x unit cost"
+        tests:
+          - not_null
+          - accepted_range:
+              min_value: 0
 
   - name: gold_transfer_suggestions
     description: "Use case 1 - where to send each transferable batch: the hospital that can use the most of it before it expires"
@@ -114,8 +129,18 @@ models:
     columns:
       - name: batch_id
         tests: [not_null]
+      - name: from_hospital_id
+        tests:
+          - relationships:
+              to: ref('silver_hospitals')
+              field: hospital_id
       - name: to_hospital_id
-        tests: [not_null]
+        description: "README: transfers stay inside the hospital group"
+        tests:
+          - not_null
+          - relationships:
+              to: ref('silver_hospitals')
+              field: hospital_id
       - name: usable_qty_before_expiry
         description: "Units the receiver can use before the batch expires, after its own stock that expires first"
         tests: [not_null]
@@ -125,3 +150,33 @@ models:
       - name: priority_rank
         description: "1 = handle first: medicines in national shortage first, then the largest saveable value"
         tests: [not_null]
+
+  - name: gold_data_quality
+    description: "Latest night: rows received, rows rejected by silver, reject rate (dashboard quality tile)"
+    columns:
+      - name: reject_rate
+        tests:
+          - not_null
+          - accepted_range:
+              min_value: 0
+              max_value: 1
+
+  - name: gold_pipeline_loads
+    description: "One row per ingestion job run, from BRONZE.LOAD_RUNS (team dashboard, pipeline tab)"
+    columns:
+      - name: job
+        tests: [not_null]
+      - name: status
+        tests:
+          - accepted_values:
+              values: [SUCCESS, FAILED]
+
+  - name: gold_quality_history
+    description: "Consumption rows per nightly delivery and reject reason (team dashboard, pipeline tab)"
+    columns:
+      - name: delivery_date
+        tests: [not_null]
+      - name: rows_received
+        tests:
+          - accepted_range:
+              min_value: 1
