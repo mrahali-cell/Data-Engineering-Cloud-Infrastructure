@@ -4,6 +4,8 @@ Owned by MEDIRELAIS_READER (03_schedule.sql): every hospital, no purchase prices
 The pipeline tab reads GOLD tables built for it (gold_pipeline_loads, gold_quality_history,
 gold_data_quality), so the dashboard never needs BRONZE or SILVER rights.
 """
+import re
+
 import altair as alt
 import pandas as pd
 import streamlit as st
@@ -24,15 +26,41 @@ def q(sql):
     return df
 
 
-def bullet(value, target, title, fmt):
-    """Bar = value, orange tick = target (orange reads on light and dark backgrounds)."""
-    df = pd.DataFrame({"what": [title], "value": [value], "target": [target]})
-    bar = alt.Chart(df).mark_bar(size=22, color="#2e7d32").encode(
-        x=alt.X("value:Q", title=None, axis=alt.Axis(format=fmt),
-                scale=alt.Scale(domain=[0, max(value, target) * 1.15 or 1])),
-        y=alt.Y("what:N", title=None))
-    tick = alt.Chart(df).mark_tick(color="#e65100", thickness=3, size=34).encode(x="target:Q", y="what:N")
-    return (bar + tick).properties(height=70)
+# One colour per meaning, the same on every chart (and the same as the hospital dashboard)
+GREEN, LIGHT_GREEN, GREY = "#2e7d32", "#a5d6a7", "#9e9e9e"
+RED, AMBER, ORANGE, BLUE = "#c62828", "#f9a825", "#e65100", "#1565c0"
+TEXT = "#8a8f98"           # value labels: readable on light and dark themes
+REASON_COLOURS = {"Transferable": GREEN, "Under 30 days": RED, "Under €200": AMBER, "Cold chain": BLUE}
+REASONS = {"transferable": "Transferable", "under_30_days": "Under 30 days",
+           "under_200_eur": "Under €200", "no_cold_chain_proof": "Cold chain"}
+SOURCES = {"s1_stock_postgres": "S1 · Stock", "s2_consumption_files": "S2 · Consumption",
+           "s3_bdpm_reference": "S3 · Drug database", "s4_shortages": "S4 · Shortages"}
+
+
+def short(hid, name):
+    """'H07', 'Centre Hospitalier de l'Est' -> 'H07 · CH Est' (full names do not fit on a chart axis)."""
+    n = str(name)
+    for long_, abbr in (("Centre Hospitalier ", "CH "), ("Hôpital ", "")):
+        if n.startswith(long_):
+            n = abbr + n[len(long_):]
+    n = re.sub(r"^(CH )?(de l'|de la |des |du |de )", r"\1", n)
+    return f"{hid} · {n[:1].upper() + n[1:]}"
+
+
+def urgency(days):
+    """Table cell colour by days left (black text: the light fills are unreadable with white text)."""
+    if days < 30:
+        return "background-color: #fbebeb; color: black"
+    if days < 60:
+        return "background-color: #f9eeda; color: black"
+    return ""
+
+
+def card(title, status, detail, bg, fg):
+    return (f"<div style='background:{bg};border-radius:10px;padding:12px 14px;color:#1f2933'>"
+            f"<div style='font-size:0.85rem;opacity:0.8'>{title}</div>"
+            f"<div style='font-size:1.25rem;font-weight:700;color:{fg}'>{status}</div>"
+            f"<div style='font-size:0.85rem'>{detail}</div></div>")
 
 
 st.set_page_config(page_title="MédiRelais · Team", layout="wide")
@@ -57,37 +85,99 @@ with business:
     c1.metric("Value expiring in 90 days", f"€{k.AT_RISK_EUR:,.0f}")
     c2.metric("Saveable by transfers", f"€{k.SAVE_EUR:,.0f}")
     c3.metric("Recovery rate", f"{rate:.0%}", f"{rate - TARGET:+.0%} vs 40 % target")
+    st.markdown("---")
 
-    st.subheader("Target vs saveable")
-    st.caption("Bar = saveable by the suggested transfers · orange tick = target (40 % of what is at risk). "
+    # ---- 1. Where the € at risk goes: one bar, three parts ----
+    st.subheader("Of the € at risk, how much can transfers save?")
+    target_eur = TARGET * k.AT_RISK_EUR
+    saved = min(k.SAVE_EUR, k.AT_RISK_EUR)
+    gap = max(target_eur - saved, 0.0)
+    parts = pd.DataFrame({
+        "PART": ["Saveable by transfers", "Gap to the 40 % target", "Rest at risk"],
+        "EUR": [saved, gap, max(k.AT_RISK_EUR - saved - gap, 0.0)]})
+    parts["END"] = parts.EUR.cumsum()
+    parts["START"] = parts.END - parts.EUR
+    parts["MID"] = (parts.START + parts.END) / 2
+    parts["LABEL"] = parts.EUR.map(lambda v: f"€{v:,.0f}")
+    parts["ROW"] = "€ at risk"
+    seg = alt.Chart(parts).mark_bar(size=46).encode(
+        x=alt.X("START:Q", title=None, axis=None, scale=alt.Scale(domain=[0, max(k.AT_RISK_EUR, 1.0)])),
+        x2="END:Q", y=alt.Y("ROW:N", title=None, axis=None),
+        color=alt.Color("PART:N", title=None, sort=list(parts.PART),
+                        scale=alt.Scale(domain=list(parts.PART), range=[GREEN, LIGHT_GREEN, GREY]),
+                        legend=alt.Legend(orient="bottom")),
+        tooltip=["PART", alt.Tooltip("EUR:Q", format=",.0f", title="€")])
+    seg_txt = alt.Chart(parts[parts.EUR > 0.08 * k.AT_RISK_EUR]).mark_text(fontWeight="bold").encode(
+        x="MID:Q", y="ROW:N", text="LABEL:N",
+        color=alt.condition(alt.datum.PART == "Gap to the 40 % target", alt.value("#1b5e20"), alt.value("white")))
+    st.altair_chart((seg + seg_txt).properties(height=110), use_container_width=True)
+    st.caption(f"Total at risk €{k.AT_RISK_EUR:,.0f} · target = 40 % of it (€{target_eur:,.0f}). "
+               "Saveable = what the receiving hospital can use before expiry. "
                "Actually saved needs a register of real transfers (out of scope, README).")
-    b1, b2 = st.columns(2)
-    b1.altair_chart(bullet(k.SAVE_EUR, TARGET * k.AT_RISK_EUR, "€", ",.0f"), use_container_width=True)
-    b1.caption(f"€{k.SAVE_EUR:,.0f} saveable · target €{TARGET * k.AT_RISK_EUR:,.0f}")
-    b2.altair_chart(bullet(k.SAVE_UNITS, TARGET * k.AT_RISK_UNITS, "Units", ",.0f"), use_container_width=True)
-    b2.caption(f"{k.SAVE_UNITS:,.0f} units saveable · target {TARGET * k.AT_RISK_UNITS:,.0f}")
 
+    st.markdown("---")
     left, right = st.columns(2)
+
+    # ---- 2. Hospitals: € at risk, split by what can be done ----
     with left:
-        st.subheader("Hospitals ranked by € at risk")
-        h = q(f"""SELECT hospital_name AS HOSPITAL, SUM(value_at_risk_eur)::FLOAT AS EUR
-                  FROM {GOLD}.GOLD_VALUE_AT_RISK WHERE {LATEST} GROUP BY 1""")
-        st.altair_chart(alt.Chart(h).mark_bar(color="#c62828").encode(
-            x=alt.X("EUR:Q", title="€ at risk"), y=alt.Y("HOSPITAL:N", sort="-x", title=None),
-            tooltip=["HOSPITAL", alt.Tooltip("EUR:Q", format=",.0f")]), use_container_width=True)
+        st.subheader("Hospitals by € at risk")
+        st.caption("Why the stock at risk can or cannot move")
+        h = q(f"""SELECT hospital_id AS ID, hospital_name AS NAME,
+                         COALESCE(transfer_block_reason, 'transferable') AS REASON,
+                         SUM(value_at_risk_eur)::FLOAT AS EUR
+                  FROM {GOLD}.GOLD_VALUE_AT_RISK WHERE {LATEST} GROUP BY 1, 2, 3""")
+        if h.empty:
+            st.write("Nothing at risk today.")
+        else:
+            h["HOSPITAL"] = [short(i, n) for i, n in zip(h.ID, h.NAME)]
+            h["STATUS"] = h.REASON.map(REASONS).fillna("Other")
+            tot = h.groupby("HOSPITAL", as_index=False).EUR.sum().sort_values("EUR", ascending=False)
+            tot["LABEL"] = tot.EUR.map(lambda v: f" €{v:,.0f}")
+            order = list(tot.HOSPITAL)
+            bars = alt.Chart(h).mark_bar().encode(
+                x=alt.X("sum(EUR):Q", title="€ at risk", axis=alt.Axis(format=",.0f"),
+                        scale=alt.Scale(domain=[0, float(tot.EUR.max()) * 1.18])),
+                y=alt.Y("HOSPITAL:N", sort=order, title=None),
+                color=alt.Color("STATUS:N", title=None, sort=list(REASON_COLOURS),
+                                scale=alt.Scale(domain=list(REASON_COLOURS), range=list(REASON_COLOURS.values())),
+                                legend=alt.Legend(orient="bottom", columns=2)),
+                order=alt.Order("STATUS:N"),
+                tooltip=["HOSPITAL", "STATUS", alt.Tooltip("sum(EUR):Q", format=",.0f", title="€")])
+            labels = alt.Chart(tot).mark_text(align="left", dx=3, color=TEXT).encode(
+                x="EUR:Q", y=alt.Y("HOSPITAL:N", sort=order), text="LABEL:N")
+            st.altair_chart((bars + labels).properties(height=34 * len(order) + 60), use_container_width=True)
+
+    # ---- 3. Today's transfers, one bar per route ----
     with right:
-        st.subheader("Transfer flows (€ saveable)")
-        f = q(f"""SELECT from_hospital_id AS FROM_H, to_hospital_id AS TO_H, SUM(saveable_value_eur)::FLOAT AS EUR
-                  FROM {GOLD}.GOLD_TRANSFER_SUGGESTIONS WHERE {LATEST} GROUP BY 1, 2""")
+        st.subheader("Today's suggested transfers")
+        st.caption("One bar per transfer, in priority order · shortage medicines first")
+        f = q(f"""SELECT priority_rank AS RANK, product_name AS PRODUCT, from_hospital_id AS FROM_H,
+                         to_hospital_id AS TO_H, saveable_value_eur::FLOAT AS EUR, is_national_shortage AS SHORTAGE
+                  FROM {GOLD}.GOLD_TRANSFER_SUGGESTIONS WHERE {LATEST} ORDER BY priority_rank""")
         if f.empty:
             st.write("No transfer suggested today.")
         else:
-            st.altair_chart(alt.Chart(f).mark_rect().encode(
-                x=alt.X("TO_H:N", title="To"), y=alt.Y("FROM_H:N", title="From"),
-                color=alt.Color("EUR:Q", title="€", scale=alt.Scale(scheme="greens")),
-                tooltip=["FROM_H", "TO_H", alt.Tooltip("EUR:Q", format=",.0f")]), use_container_width=True)
+            f["ROUTE"] = [f"{int(r)}. {a} → {b} · {p}" for r, a, b, p in zip(f.RANK, f.FROM_H, f.TO_H, f.PRODUCT)]
+            f["KIND"] = f.SHORTAGE.map({True: "Medicine in shortage in France", False: "Transfer"}).fillna("Transfer")
+            f["LABEL"] = f.EUR.map(lambda v: f" €{v:,.0f}")
+            order = list(f.ROUTE)
+            bars = alt.Chart(f).mark_bar().encode(
+                x=alt.X("EUR:Q", title="€ saveable", axis=alt.Axis(format=",.0f"),
+                        scale=alt.Scale(domain=[0, float(f.EUR.max()) * 1.18])),
+                y=alt.Y("ROUTE:N", sort=order, title=None, axis=alt.Axis(labelLimit=320)),
+                color=alt.Color("KIND:N", title=None,
+                                scale=alt.Scale(domain=["Medicine in shortage in France", "Transfer"],
+                                                range=[ORANGE, GREEN]),
+                                legend=alt.Legend(orient="bottom", labelLimit=300)),
+                tooltip=["ROUTE", "KIND", alt.Tooltip("EUR:Q", format=",.0f", title="€")])
+            labels = alt.Chart(f).mark_text(align="left", dx=3, color=TEXT).encode(
+                x="EUR:Q", y=alt.Y("ROUTE:N", sort=order), text="LABEL:N")
+            st.altair_chart((bars + labels).properties(height=38 * len(order) + 60), use_container_width=True)
 
-    left, right = st.columns([2, 3])          # narrower charts, wider table on the right
+    st.markdown("---")
+    left, right = st.columns(2)
+
+    # ---- 4. Trend: at risk, saveable and target over the snapshot days ----
     with left:
         st.subheader("Trend by snapshot day")
         t = q(f"""
@@ -97,41 +187,68 @@ with business:
             LEFT JOIN (SELECT snapshot_date, SUM(saveable_value_eur) AS saveable
                        FROM {GOLD}.GOLD_TRANSFER_SUGGESTIONS GROUP BY 1) s USING (snapshot_date)
             GROUP BY 1 ORDER BY 1""")
-        t["RECOVERY"] = t.SAVEABLE / t.AT_RISK
-        t["DAY_LABEL"] = pd.to_datetime(t.DAY).dt.strftime("%d %b")
-        # Stacked bar: the whole bar = value at risk, split into the part transfers can save and the rest
-        t["NOT_SAVEABLE"] = (t.AT_RISK - t.SAVEABLE).clip(lower=0)
-        long = t.melt(["DAY_LABEL"], ["SAVEABLE", "NOT_SAVEABLE"], var_name="WHAT", value_name="EUR")
-        long["WHAT"] = long.WHAT.map({"SAVEABLE": "Saveable", "NOT_SAVEABLE": "Not saveable"})
-        st.altair_chart(alt.Chart(long).mark_bar().encode(
-            x=alt.X("DAY_LABEL:O", title=None, sort=list(t.DAY_LABEL)),
-            y=alt.Y("EUR:Q", title="€ at risk", stack="zero"),
-            color=alt.Color("WHAT:N", title=None, sort=["Saveable", "Not saveable"],
-                            scale=alt.Scale(domain=["Saveable", "Not saveable"], range=["#2e7d32", "#9e9e9e"]),
-                            legend=alt.Legend(orient="bottom")),
-            order=alt.Order("WHAT:N", sort="descending"),
-            tooltip=["DAY_LABEL", "WHAT", alt.Tooltip("EUR:Q", format=",.0f")]),
-            use_container_width=True)
-        st.caption("Recovery rate by day · dashed line = 40 % target")
-        bars = alt.Chart(t).mark_bar(color="#2e7d32").encode(
-            x=alt.X("DAY_LABEL:O", title=None, sort=list(t.DAY_LABEL)),
-            y=alt.Y("RECOVERY:Q", title="Recovery", axis=alt.Axis(format="%")),
-            tooltip=["DAY_LABEL", alt.Tooltip("RECOVERY:Q", format=".0%")])
-        goal = alt.Chart(pd.DataFrame({"y": [TARGET]})).mark_rule(strokeDash=[6, 4], color="#e65100").encode(y="y:Q")
-        st.altair_chart((bars + goal).properties(height=160), use_container_width=True)
+        if len(t) < 2:
+            st.info("The trend appears from the second snapshot day. "
+                    f"Today there is one day of results ({latest}).")
+        else:
+            t["TARGET (40 %)"] = TARGET * t.AT_RISK
+            t = t.rename(columns={"AT_RISK": "At risk", "SAVEABLE": "Saveable"})
+            long = t.melt(["DAY"], ["At risk", "Saveable", "TARGET (40 %)"], var_name="WHAT", value_name="EUR")
+            st.caption("€ at risk, € saveable and the 40 % target, per day")
+            st.altair_chart(alt.Chart(long).mark_line(point=True, strokeWidth=3).encode(
+                x=alt.X("DAY:T", title=None, axis=alt.Axis(format="%d %b")),
+                y=alt.Y("EUR:Q", title="€", axis=alt.Axis(format=",.0f")),
+                color=alt.Color("WHAT:N", title=None,
+                                scale=alt.Scale(domain=["At risk", "Saveable", "TARGET (40 %)"],
+                                                range=[RED, GREEN, ORANGE]),
+                                legend=alt.Legend(orient="bottom")),
+                strokeDash=alt.condition(alt.datum.WHAT == "TARGET (40 %)", alt.value([6, 4]), alt.value([1, 0])),
+                tooltip=[alt.Tooltip("DAY:T", format="%d %b"), "WHAT", alt.Tooltip("EUR:Q", format=",.0f")]
+            ).properties(height=280), use_container_width=True)
+
+    # ---- 5. Over-stock ----
     with right:
         st.subheader("Over-stock € by hospital")
-        o = q(f"""SELECT hospital_name AS HOSPITAL, SUM(overstock_value_eur)::FLOAT AS EUR
-                  FROM {GOLD}.GOLD_DAYS_OF_COVER WHERE {LATEST} GROUP BY 1 HAVING SUM(overstock_value_eur) > 0""")
-        st.altair_chart(alt.Chart(o).mark_bar(color="#f9a825").encode(
-            x=alt.X("EUR:Q", title="€ that will expire unused"), y=alt.Y("HOSPITAL:N", sort="-x", title=None),
-            tooltip=["HOSPITAL", alt.Tooltip("EUR:Q", format=",.0f")]), use_container_width=True)
-        st.subheader("Shortage medicines at risk")
-        st.dataframe(q(f"""
-            SELECT hospital_name AS HOSPITAL, product_name AS PRODUCT, qty_on_hand AS QTY,
-                   days_to_expiry AS DAYS_LEFT, value_at_risk_eur::FLOAT AS EUR
-            FROM {GOLD}.GOLD_VALUE_AT_RISK WHERE is_national_shortage AND {LATEST}
-            ORDER BY DAYS_LEFT"""), use_container_width=True)
+        st.caption("Stock that will expire before it is used at the current pace: order less")
+        o = q(f"""SELECT hospital_id AS ID, hospital_name AS NAME, SUM(overstock_value_eur)::FLOAT AS EUR
+                  FROM {GOLD}.GOLD_DAYS_OF_COVER WHERE {LATEST} GROUP BY 1, 2 HAVING SUM(overstock_value_eur) > 0""")
+        if o.empty:
+            st.write("No over-stock today.")
+        else:
+            o["HOSPITAL"] = [short(i, n) for i, n in zip(o.ID, o.NAME)]
+            o["LABEL"] = o.EUR.map(lambda v: f" €{v:,.0f}")
+            order = list(o.sort_values("EUR", ascending=False).HOSPITAL)
+            bars = alt.Chart(o).mark_bar(color=AMBER).encode(
+                x=alt.X("EUR:Q", title="€ that will expire unused", axis=alt.Axis(format=",.0f"),
+                        scale=alt.Scale(domain=[0, float(o.EUR.max()) * 1.18])),
+                y=alt.Y("HOSPITAL:N", sort=order, title=None),
+                tooltip=["HOSPITAL", alt.Tooltip("EUR:Q", format=",.0f", title="€")])
+            labels = alt.Chart(o).mark_text(align="left", dx=3, color=TEXT).encode(
+                x="EUR:Q", y=alt.Y("HOSPITAL:N", sort=order), text="LABEL:N")
+            st.altair_chart((bars + labels).properties(height=40 * len(order) + 50), use_container_width=True)
+
+    # ---- 6. Shortage medicines at risk ----
+    st.markdown("---")
+    st.subheader("Shortage medicines at risk")
+    st.caption("Medicines in national shortage that expire within 90 days · most urgent first "
+               "(red: under 30 days, amber: under 60 days)")
+    s = q(f"""
+        SELECT product_name AS MEDICINE, hospital_id AS ID, hospital_name AS NAME, qty_on_hand AS QTY,
+               days_to_expiry AS DAYS_LEFT, value_at_risk_eur::FLOAT AS EUR
+        FROM {GOLD}.GOLD_VALUE_AT_RISK WHERE is_national_shortage AND {LATEST}
+        ORDER BY DAYS_LEFT""")
+    if s.empty:
+        st.write("No shortage medicine at risk today.")
+    else:
+        s["HOSPITAL"] = [short(i, n) for i, n in zip(s.ID, s.NAME)]
+        # Row label = medicine + hospital code (unique, so the table needs no 0, 1, 2... column)
+        s.index = [f"{m} · {i}" for m, i in zip(s.MEDICINE, s.ID)]
+        s = s[["HOSPITAL", "QTY", "DAYS_LEFT", "EUR"]]
+        s.columns = ["Hospital", "Quantity", "Days left", "€ at risk"]
+        st.dataframe(s.style
+                     .format({"€ at risk": "€{:,.0f}", "Quantity": "{:,.0f}", "Days left": "{:.0f}"})
+                     .applymap(urgency, subset=["Days left"]),
+                     use_container_width=True)
 
 # =============================== PIPELINE ===============================
 with pipeline:
@@ -160,47 +277,98 @@ with pipeline:
                   delta_color="inverse" if dq.GOLD_BLOCKED[0] else "normal")
     p4.metric("Rows lost (read ≠ loaded)", int((~sel.NOTHING_LOST.astype(bool)).sum()))
 
+    st.markdown("---")
+
+    # ---- Last load of each of the 4 sources ----
+    st.subheader("Last load of each source")
+    cards = st.columns(len(SOURCES))
+    for col, (job, label) in zip(cards, SOURCES.items()):
+        row = last[last.JOB == job]
+        if row.empty:
+            col.markdown(card(label, "No run logged", "", "#fbebeb", RED), unsafe_allow_html=True)
+            continue
+        hrs = float((pd.Timestamp.now(tz="UTC") - pd.to_datetime(row.RUN_AT.iloc[0], utc=True)).total_seconds() / 3600)
+        ok = row.STATUS.iloc[0] == "SUCCESS"
+        bg, fg = (("#e5f4e4", GREEN) if hrs < 26 else ("#f9eeda", "#8a5a00")) if ok else ("#fbebeb", RED)
+        col.markdown(card(label, row.STATUS.iloc[0].capitalize(), f"{hrs:,.1f} h ago", bg, fg), unsafe_allow_html=True)
+
+    st.markdown("---")
     left, right = st.columns(2)
+
+    # ---- Grid: one cell per source and day ----
     with left:
-        st.subheader("Ingestion per source and day")
-        daily = sel.groupby(["RUN_DATE", "JOB"]).agg(
-            RUNS=("STATUS", "size"), FAILED=("STATUS", lambda s: int((s != "SUCCESS").sum())),
-            ROWS_IN=("ROWS_IN", "sum"), ROWS_LOADED=("ROWS_LOADED", "sum")).reset_index()
-        daily["NOTHING_LOST"] = daily.ROWS_IN == daily.ROWS_LOADED
-        st.dataframe(daily.sort_values(["RUN_DATE", "JOB"], ascending=[False, True]),
-                     use_container_width=True)
-        st.subheader("Hours since last load")
-        fr = last[["JOB", "STATUS"]].assign(HOURS=hours.round(1).values)
-        st.dataframe(fr.style.apply(lambda r: [
-            # black text: the cell colours are light, so the default text is unreadable in dark mode
-            "background-color: #e5f4e4; color: black" if r.HOURS < 26 else
-            "background-color: #f9eeda; color: black" if r.HOURS < 50 else
-            "background-color: #fbebeb; color: black"] * len(r), axis=1),
-            use_container_width=True)
+        st.subheader("Loads per source and day")
+        st.caption("Green: every run of the day succeeded · amber: a run failed, then a retry worked "
+                   "· number = rows loaded")
+        daily = sel[sel.JOB.isin(list(SOURCES))].groupby(["RUN_DATE", "JOB"]).agg(
+            RUNS=("STATUS", "size"), FAILED=("STATUS", lambda x: int((x != "SUCCESS").sum())),
+            ROWS_LOADED=("ROWS_LOADED", "sum")).reset_index()
+        if daily.empty:
+            st.write("No load in this date range.")
+        else:
+            daily["SOURCE"] = daily.JOB.map(SOURCES)
+            daily["RESULT"] = daily.FAILED.map(lambda n: "All runs OK" if n == 0 else "Retried after a failure")
+            daily["LABEL"] = daily.ROWS_LOADED.map(lambda v: f"{v:,.0f}")
+            daily["DAY"] = pd.to_datetime(daily.RUN_DATE).dt.strftime("%d %b")
+            day_order = sorted(daily.DAY.unique(), key=lambda d: pd.to_datetime(d + " 2026"))
+            base = alt.Chart(daily).encode(
+                x=alt.X("DAY:O", title=None, sort=day_order, axis=alt.Axis(labelAngle=0)),
+                y=alt.Y("SOURCE:N", title=None, sort=list(SOURCES.values())))
+            grid = base.mark_rect(stroke="white", strokeWidth=3).encode(
+                color=alt.Color("RESULT:N", title=None,
+                                scale=alt.Scale(domain=["All runs OK", "Retried after a failure"],
+                                                range=[GREEN, AMBER]),
+                                legend=alt.Legend(orient="bottom")),
+                tooltip=["DAY", "SOURCE", "RUNS", "FAILED", alt.Tooltip("ROWS_LOADED:Q", format=",.0f")])
+            txt = base.mark_text(color="white", fontWeight="bold").encode(text="LABEL:N")
+            st.altair_chart((grid + txt).properties(height=230), use_container_width=True)
+
+    # ---- Quality gate: reject rate per night against the 15 % line ----
     with right:
-        st.subheader("Reject rate by night (consumption)")
+        st.subheader("Quality gate, night by night")
+        st.caption("Share of the night's consumption rows rejected · dashed line = 15 % gate "
+                   "(above it, gold is not refreshed)")
         night = hist.groupby("DELIVERY_DATE").apply(
             lambda g: pd.Series({"RATE": g.loc[g.IS_REJECTED, "ROWS_RECEIVED"].sum() / g.ROWS_RECEIVED.sum()})
         ).reset_index()
-        night["GATE"] = (night.RATE > MAX_REJECT).map({True: "Blocked", False: "Passed"})
-        line = alt.Chart(night).mark_line(point=True).encode(
-            x=alt.X("DELIVERY_DATE:T", title=None), y=alt.Y("RATE:Q", title="Rejected", axis=alt.Axis(format="%")),
-            tooltip=["DELIVERY_DATE", alt.Tooltip("RATE:Q", format=".1%"), "GATE"])
-        rule = alt.Chart(pd.DataFrame({"y": [MAX_REJECT]})).mark_rule(strokeDash=[6, 4], color="#c62828").encode(y="y:Q")
-        st.altair_chart(line + rule, use_container_width=True)
-        st.caption("Dashed line: the 15 % quality gate")
-        st.subheader("Gate result per night")
-        st.altair_chart(alt.Chart(night).mark_square(size=400).encode(
-            x=alt.X("DELIVERY_DATE:T", title=None),
-            color=alt.Color("GATE:N", title=None, scale=alt.Scale(domain=["Passed", "Blocked"],
-                                                                  range=["#2e7d32", "#c62828"])),
-            tooltip=["DELIVERY_DATE", "GATE"]).properties(height=60), use_container_width=True)
-        st.subheader("Rejects by reason")
-        rej = hist[hist.ROW_STATUS != "clean"]
-        st.altair_chart(alt.Chart(rej).mark_bar().encode(
-            x=alt.X("DELIVERY_DATE:T", title=None), y=alt.Y("sum(ROWS_RECEIVED):Q", title="Rows"),
-            color=alt.Color("ROW_STATUS:N", title="Reason"),
-            tooltip=["DELIVERY_DATE", "ROW_STATUS", "sum(ROWS_RECEIVED)"]), use_container_width=True)
+        if night.empty:
+            st.write("No delivery yet.")
+        else:
+            night["GATE"] = (night.RATE > MAX_REJECT).map({True: "Blocked", False: "Passed"})
+            night["NIGHT"] = pd.to_datetime(night.DELIVERY_DATE).dt.strftime("%d %b")
+            night["LABEL"] = night.RATE.map(lambda v: f"{v:.1%}")
+            order = list(night.sort_values("DELIVERY_DATE").NIGHT)
+            ymax = max(float(night.RATE.max()), MAX_REJECT) * 1.25
+            bars = alt.Chart(night).mark_bar(size=38).encode(
+                x=alt.X("NIGHT:O", title=None, sort=order, axis=alt.Axis(labelAngle=0)),
+                y=alt.Y("RATE:Q", title="Rows rejected", axis=alt.Axis(format="%"),
+                        scale=alt.Scale(domain=[0, ymax])),
+                color=alt.Color("GATE:N", title=None, scale=alt.Scale(domain=["Passed", "Blocked"],
+                                                                     range=[GREEN, RED]),
+                                legend=alt.Legend(orient="bottom")),
+                tooltip=["NIGHT", alt.Tooltip("RATE:Q", format=".1%"), "GATE"])
+            labels = alt.Chart(night).mark_text(dy=-8, color=TEXT).encode(
+                x=alt.X("NIGHT:O", sort=order), y="RATE:Q", text="LABEL:N")
+            rule = alt.Chart(pd.DataFrame({"y": [MAX_REJECT]})).mark_rule(
+                strokeDash=[6, 4], color=RED, size=2).encode(y="y:Q")
+            st.altair_chart((bars + labels + rule).properties(height=230), use_container_width=True)
 
-    st.caption("Not shown yet: dbt test results per run and credits per day (need a test-results table "
-               "and a role with access to SNOWFLAKE.ACCOUNT_USAGE; see snowflake/05_costs.sql).")
+    # ---- Why rows were rejected ----
+    st.subheader("Why rows were rejected")
+    st.caption("Share of each reason among the night's quarantined consumption rows "
+               "(duplicates are kept once, so they are not errors) · hover for the row counts")
+    rej = hist[hist.ROW_STATUS != "clean"].copy()
+    if rej.empty:
+        st.write("No rejected row.")
+    else:
+        rej["NIGHT"] = pd.to_datetime(rej.DELIVERY_DATE).dt.strftime("%d %b")
+        rej["REASON"] = rej.ROW_STATUS.str.replace("_", " ")
+        order = sorted(rej.NIGHT.unique(), key=lambda d: pd.to_datetime(d + " 2026"))
+        st.altair_chart(alt.Chart(rej).mark_bar().encode(
+            y=alt.Y("NIGHT:O", title=None, sort=order),
+            # share, not count: the first night holds 4 weeks of history and would hide the others
+            x=alt.X("sum(ROWS_RECEIVED):Q", title=None, stack="normalize", axis=alt.Axis(format="%")),
+            color=alt.Color("REASON:N", title=None, scale=alt.Scale(scheme="tableau10"),
+                            legend=alt.Legend(orient="bottom", columns=3)),
+            tooltip=["NIGHT", "REASON", alt.Tooltip("sum(ROWS_RECEIVED):Q", title="Rows")]
+        ).properties(height=40 * len(order) + 70), use_container_width=True)
